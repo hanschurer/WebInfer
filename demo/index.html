@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebInfer.js - Interactive Demo</title>
+  <link rel="stylesheet" href="/demo/styles.css">
+  <!-- Import map for onnxruntime-web -->
+  <script type="importmap">
+    {
+      "imports": {
+        "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/esm/ort.min.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1><span>⚡ WebInfer.js</span></h1>
+      <p class="subtitle">Lightweight Browser ML Inference Framework</p>
+    </header>
+
+    <!-- Row 1: Status Cards + Model Loading -->
+    <div class="bento-grid">
+      <!-- Runtime Status -->
+      <div class="bento-card span-3">
+        <div class="card-header">
+          <div class="card-icon">🖥️</div>
+          <div class="card-title">Runtime</div>
+        </div>
+        <div class="status-list" id="runtime-status"></div>
+      </div>
+
+      <!-- Memory Status -->
+      <div class="bento-card span-3">
+        <div class="card-header">
+          <div class="card-icon green">📊</div>
+          <div class="card-title">Memory</div>
+        </div>
+        <div class="status-list" id="memory-status"></div>
+      </div>
+
+      <!-- Model Loading -->
+      <div class="bento-card span-6">
+        <div class="card-header">
+          <div class="card-icon pink">📦</div>
+          <div>
+            <div class="card-title">Load ONNX Model</div>
+            <div class="card-desc">Download and initialize real ONNX models from Hugging Face</div>
+          </div>
+        </div>
+        <input type="text" id="model-url" placeholder="Enter ONNX model URL..." class="mb-2"
+               value="https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/onnx/model_quantized.onnx">
+        <div class="btn-group">
+          <button onclick="Demo.loadModel()">Load Model</button>
+          <button class="btn-secondary" onclick="Demo.testModel()">Test Inference</button>
+        </div>
+        <div class="output mt-2" id="model-output"></div>
+      </div>
+    </div>
+
+    <!-- Row 2: Core Operations -->
+    <div class="bento-grid">
+      <!-- Tensor Operations -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon">🧮</div>
+          <div>
+            <div class="card-title">Tensor Operations</div>
+            <div class="card-desc">Create, manipulate, and compute tensors</div>
+          </div>
+        </div>
+        <button onclick="Demo.testTensors()">Run Tests</button>
+        <div class="output mt-2" id="tensor-output"></div>
+      </div>
+
+      <!-- Text Classification -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon pink">📝</div>
+          <div>
+            <div class="card-title">Text Classification</div>
+            <div class="card-desc">Sentiment analysis with loaded model</div>
+          </div>
+        </div>
+        <input type="text" id="text-input" placeholder="Enter text..." value="I love this product!" class="mb-2">
+        <div class="btn-group">
+          <button onclick="Demo.classifyText()">Classify</button>
+          <button class="btn-secondary" onclick="Demo.classifyBatch()">Batch</button>
+        </div>
+        <div class="output mt-2" id="text-output"></div>
+      </div>
+
+      <!-- Feature Extraction -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon green">🔍</div>
+          <div>
+            <div class="card-title">Feature Extraction</div>
+            <div class="card-desc">Extract embeddings from text</div>
+          </div>
+        </div>
+        <textarea id="feature-input" class="mb-2" placeholder="Enter text...">Machine learning is transforming software.</textarea>
+        <button onclick="Demo.extractFeatures()">Extract</button>
+        <div class="output mt-2" id="feature-output"></div>
+      </div>
+    </div>
+
+    <!-- Row 2.25: NER -->
+    <div class="bento-grid">
+      <div class="bento-card span-12">
+        <div class="card-header">
+          <div class="card-icon green">🏷️</div>
+          <div>
+            <div class="card-title">Named Entity Recognition (NER)</div>
+            <div class="card-desc">Token classification pipeline (span-based entities)</div>
+          </div>
+        </div>
+        <textarea id="ner-input" class="mb-2" placeholder="Enter text...">Barack Obama visited Beijing and met researchers at OpenAI Labs.</textarea>
+        <div class="btn-group">
+          <button onclick="Demo.loadNERModel()">Load NER Model</button>
+          <button onclick="Demo.runNER()">Run NER</button>
+        </div>
+        <div class="output mt-2" id="ner-output"></div>
+      </div>
+    </div>
+
+    <!-- Row 3: Tools -->
+    <div class="bento-grid">
+      <!-- Quantization -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon orange">📦</div>
+          <div>
+            <div class="card-title">Model Quantization</div>
+            <div class="card-desc">Compress tensors to int8/float16</div>
+          </div>
+        </div>
+        <div class="btn-group mb-2">
+          <button onclick="Demo.quantize()">Quantize</button>
+          <button class="btn-secondary" onclick="Demo.prune()">Prune</button>
+        </div>
+        <div class="output" id="quant-output"></div>
+      </div>
+
+      <!-- Debugger -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon">🔬</div>
+          <div>
+            <div class="card-title">Tensor Debugger</div>
+            <div class="card-desc">Inspect tensor statistics & distribution</div>
+          </div>
+        </div>
+        <button onclick="Demo.debug()">Inspect Tensor</button>
+        <div class="output mt-2" id="debugger-output"></div>
+      </div>
+
+      <!-- Benchmark -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon pink">⚡</div>
+          <div>
+            <div class="card-title">Benchmark</div>
+            <div class="card-desc">Measure operation performance</div>
+          </div>
+        </div>
+        <button onclick="Demo.benchmark()">Run Benchmark</button>
+        <div class="output mt-2" id="benchmark-output"></div>
+      </div>
+    </div>
+
+    <!-- Row 4: System -->
+    <div class="bento-grid">
+      <!-- Scheduler -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon green">📋</div>
+          <div>
+            <div class="card-title">Task Scheduler</div>
+            <div class="card-desc">Priority-based task scheduling</div>
+          </div>
+        </div>
+        <button onclick="Demo.testScheduler()">Test Scheduler</button>
+        <div class="output mt-2" id="scheduler-output"></div>
+      </div>
+
+      <!-- Memory Management -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon orange">💾</div>
+          <div>
+            <div class="card-title">Memory Management</div>
+            <div class="card-desc">Allocate, track, and release tensors</div>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button onclick="Demo.allocateMemory()">Allocate</button>
+          <button class="btn-secondary" onclick="Demo.cleanupMemory()">Cleanup</button>
+        </div>
+        <div class="output mt-2" id="memory-output"></div>
+      </div>
+
+      <!-- Concurrency -->
+      <div class="bento-card span-4">
+        <div class="card-header">
+          <div class="card-icon">⚡</div>
+          <div>
+            <div class="card-title">Concurrent Execution</div>
+            <div class="card-desc">Run multiple inferences in parallel</div>
+          </div>
+        </div>
+        <button onclick="Demo.testConcurrency()">Run Test</button>
+        <div class="output mt-2" id="concurrency-output"></div>
+        <div class="metrics mt-2 hidden" id="concurrency-metrics"></div>
+      </div>
+    </div>
+
+    <!-- Row 5: Monitor -->
+    <div class="bento-grid">
+      <div class="bento-card span-12">
+        <div class="card-header">
+          <div class="card-icon pink">📊</div>
+          <div>
+            <div class="card-title">Performance Monitor</div>
+            <div class="card-desc">Real-time performance metrics and visualization</div>
+          </div>
+        </div>
+        <div class="btn-group mb-2">
+          <button onclick="Demo.startMonitor()">Start</button>
+          <button class="btn-secondary" onclick="Demo.simulateInferences()">Simulate</button>
+          <button class="btn-secondary" onclick="Demo.openDashboard()">Dashboard</button>
+          <button class="btn-secondary" onclick="Demo.stopMonitor()">Stop</button>
+        </div>
+        <div class="metrics" id="monitor-metrics"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>WebInfer.js v0.1.0 | <a href="https://github.com/nicepkg/WebInfer.js" target="_blank">GitHub</a></p>
+    </footer>
+  </div>
+
+  <!-- Dashboard Modal -->
+  <div class="modal-overlay" id="dashboard-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">📊 Performance Dashboard</span>
+        <button class="modal-close" onclick="Demo.closeDashboard()">×</button>
+      </div>
+      <iframe id="dashboard-frame" class="modal-frame"></iframe>
+    </div>
+  </div>
+
+  <!-- Demo Script -->
+  <script type="module" src="/demo/demo.js"></script>
+</body>
+</html>
