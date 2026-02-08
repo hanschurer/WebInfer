@@ -52,7 +52,7 @@ Run the interactive demo locally to test all features:
 
 ```bash
 # Clone and install
-git clone https://github.com/user/WebInfer.js.git
+git clone https://github.com/hanschurer/WebInfer.js.git
 cd WebInfer.js
 npm install
 
@@ -589,6 +589,5 @@ MIT © WebInfer.js Contributors
 
 **[Get Started](https://WebInfer.js.org/getting-started) · [API Docs](https://WebInfer.js.org/api) · [Examples](examples/)**
 
-Made with ❤️ for the edge AI community
 
 </div>

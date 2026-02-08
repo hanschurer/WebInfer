@@ -64,10 +64,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/s-zx/WebInfer.js"
+    "url": "https://github.com/hanschurer/WebInfer.js"
   },
   "bugs": {
-    "url": "https://github.com/s-zx/WebInfer.js/issues"
+    "url": "https://github.com/hanschurer/WebInfer.js/issues"
   },
   "homepage": "https://WebInfer.js.org",
   "dependencies": {
