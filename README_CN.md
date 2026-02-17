@@ -4,9 +4,9 @@
 
 **浏览器端机器学习推理框架，内置任务调度和智能缓存**
 
-[![npm version](https://img.shields.io/npm/v/WebInferjs.svg)](https://www.npmjs.com/package/WebInferjs)
-[![install size](https://packagephobia.com/badge?p=WebInferjs)](https://packagephobia.com/result?p=WebInferjs)
-[![license](https://img.shields.io/npm/l/WebInferjs)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/webinfer-js.svg)](https://www.npmjs.com/package/webinfer-js)
+[![install size](https://packagephobia.com/badge?p=webinfer-js)](https://packagephobia.com/result?p=webinfer-js)
+[![license](https://img.shields.io/npm/l/webinfer-js)](LICENSE)
 
 [文档](https://WebInfer.js.org) · [示例](examples/) · [API 参考](https://WebInfer.js.org/api) · [English](README.md) | [中文](README_CN.md)
 
@@ -31,15 +31,15 @@
 ## 📦 安装
 
 ```bash
-npm install WebInferjs
+npm install webinfer-js
 ```
 
 ```bash
-yarn add WebInferjs
+yarn add webinfer-js
 ```
 
 ```bash
-pnpm add WebInferjs
+pnpm add webinfer-js
 ```
 
 > **注意**: ONNX Runtime 已作为依赖包含，无需额外配置。
@@ -79,7 +79,7 @@ npm run demo
 ### 基础用法
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 // 创建情感分析流水线
 const sentiment = await pipeline('sentiment-analysis');
@@ -111,7 +111,7 @@ console.log(results);
 ### 多流水线
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 // 创建多个流水线
 const classifier = await pipeline('text-classification');
@@ -127,7 +127,7 @@ const [classification, features] = await Promise.all([
 ### 图像分类
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const classifier = await pipeline('image-classification');
 
@@ -145,7 +145,7 @@ const results = await classifier.run([img1, img2, img3]);
 ### 文本生成（流式输出）
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const generator = await pipeline('text-generation');
 
@@ -166,7 +166,7 @@ for await (const event of generator.stream('你好，')) {
 ### 零样本分类
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const classifier = await pipeline('zero-shot-classification');
 
@@ -182,7 +182,7 @@ console.log(result.labels[0], result.scores[0]);
 ### 问答系统
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const qa = await pipeline('question-answering');
 
@@ -197,7 +197,7 @@ console.log(result.answer); // '巴黎'
 ### 命名实体识别（NER）
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const ner = await pipeline('token-classification');
 
@@ -217,7 +217,7 @@ console.log(entities);
 ### 从 HuggingFace Hub 加载
 
 ```typescript
-import { fromHub, fromTask } from 'WebInferjs';
+import { fromHub, fromTask } from 'webinfer-js';
 
 // 通过模型 ID 加载（自动下载模型、分词器、配置）
 const bundle = await fromHub('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
@@ -231,7 +231,7 @@ const sentimentBundle = await fromTask('sentiment-analysis');
 ### Web Workers（后台推理）
 
 ```typescript
-import { runInWorker, WorkerPool, isWorkerSupported } from 'WebInferjs';
+import { runInWorker, WorkerPool, isWorkerSupported } from 'webinfer-js';
 
 // 简单：在后台线程运行推理
 if (isWorkerSupported()) {
@@ -283,7 +283,7 @@ pool.terminate();
 ### 运行时选择
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 // 自动选择（推荐）
 const model = await pipeline('text-classification');
@@ -297,7 +297,7 @@ const model = await pipeline('text-classification', {
 ### 内存管理
 
 ```typescript
-import { pipeline, getMemoryStats, gc } from 'WebInferjs';
+import { pipeline, getMemoryStats, gc } from 'webinfer-js';
 
 const model = await pipeline('text-classification');
 
@@ -318,7 +318,7 @@ gc();
 ### 调度器配置
 
 ```typescript
-import { configureScheduler } from 'WebInferjs';
+import { configureScheduler } from 'webinfer-js';
 
 configureScheduler({
   maxConcurrentTasks: 4,
@@ -332,7 +332,7 @@ configureScheduler({
 ### 缓存
 
 ```typescript
-import { pipeline, Cache } from 'WebInferjs';
+import { pipeline, Cache } from 'webinfer-js';
 
 // 创建缓存
 const cache = new Cache({
@@ -351,7 +351,7 @@ const model = await pipeline('text-classification', {
 ### 自定义模型加载
 
 ```typescript
-import { loadModel, runInference } from 'WebInferjs';
+import { loadModel, runInference } from 'webinfer-js';
 
 // 从 URL 加载，支持缓存、分片和断点续传
 const model = await loadModel('https://example.com/model.bin', {
@@ -373,7 +373,7 @@ model.dispose();
 ### 模型预加载
 
 ```typescript
-import { preloadModel, preloadModels, getPreloadStatus } from 'WebInferjs';
+import { preloadModel, preloadModels, getPreloadStatus } from 'webinfer-js';
 
 // 后台预加载单个模型（支持优先级）
 preloadModel('https://example.com/model1.onnx', { priority: 10 });
@@ -398,7 +398,7 @@ import {
   deleteCachedModel, 
   clearModelCache,
   getModelCacheStats 
-} from 'WebInferjs';
+} from 'webinfer-js';
 
 // 检查模型是否已缓存
 if (await isModelCached('https://example.com/model.onnx')) {
@@ -424,7 +424,7 @@ console.log(`${stats.models} 个模型已缓存，共 ${stats.totalSize} 字节`
 大模型下载自动支持从断点处继续：
 
 ```typescript
-import { loadModelData } from 'WebInferjs';
+import { loadModelData } from 'webinfer-js';
 
 // 带进度和断点续传的下载
 const modelData = await loadModelData('https://example.com/large-model.onnx', {
@@ -443,7 +443,7 @@ const modelData = await loadModelData('https://example.com/large-model.onnx', {
 ### 模型量化
 
 ```typescript
-import { quantize } from 'WebInferjs/tools';
+import { quantize } from 'webinfer-js/tools';
 
 const quantized = await quantize(model, {
   method: 'int8',
@@ -457,7 +457,7 @@ console.log(`压缩比: ${quantized.compressionRatio}x`);
 ### 性能测试
 
 ```typescript
-import { benchmark } from 'WebInferjs/tools';
+import { benchmark } from 'webinfer-js/tools';
 
 const result = await benchmark(
   () => model.run('sample text'),
@@ -476,7 +476,7 @@ console.log(result);
 ### 内存作用域
 
 ```typescript
-import { withMemoryScope, tensor } from 'WebInferjs';
+import { withMemoryScope, tensor } from 'webinfer-js';
 
 const result = await withMemoryScope(async (scope) => {
   // 在作用域中追踪张量
@@ -495,7 +495,7 @@ const result = await withMemoryScope(async (scope) => {
 ## 🔌 张量操作
 
 ```typescript
-import { tensor, zeros, ones, matmul, softmax, relu } from 'WebInferjs';
+import { tensor, zeros, ones, matmul, softmax, relu } from 'webinfer-js';
 
 // 创建张量
 const a = tensor([[1, 2], [3, 4]]);

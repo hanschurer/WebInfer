@@ -1,5 +1,5 @@
 {
-  "name": "webinfer",
+  "name": "webinfer-js",
   "version": "0.1.0",
   "description": "Lightweight, high-performance browser ML inference framework with native concurrency support",
   "type": "module",

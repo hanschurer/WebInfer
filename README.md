@@ -4,9 +4,9 @@
 
 **Browser ML inference framework with task scheduling and smart caching.**
 
-[![npm version](https://img.shields.io/npm/v/WebInferjs.svg)](https://www.npmjs.com/package/WebInferjs)
-[![install size](https://packagephobia.com/badge?p=WebInferjs)](https://packagephobia.com/result?p=WebInferjs)
-[![license](https://img.shields.io/npm/l/WebInferjs)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/webinfer-js.svg)](https://www.npmjs.com/package/webinfer-js)
+[![install size](https://packagephobia.com/badge?p=webinfer-js)](https://packagephobia.com/result?p=webinfer-js)
+[![license](https://img.shields.io/npm/l/webinfer-js)](LICENSE)
 
 [Documentation](https://WebInfer.js.org) · [Examples](examples/) · [API Reference](https://WebInfer.js.org/api) · [English](README.md) | [中文](README_CN.md)
 
@@ -31,15 +31,15 @@
 ## 📦 Installation
 
 ```bash
-npm install WebInferjs
+npm install webinfer-js
 ```
 
 ```bash
-yarn add WebInferjs
+yarn add webinfer-js
 ```
 
 ```bash
-pnpm add WebInferjs
+pnpm add webinfer-js
 ```
 
 > **Note**: ONNX Runtime is included as a dependency. No additional setup required.
@@ -79,7 +79,7 @@ Open **http://localhost:3000** in your browser:
 ### Basic Usage
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 // Create a sentiment analysis pipeline
 const sentiment = await pipeline('sentiment-analysis');
@@ -111,7 +111,7 @@ console.log(results);
 ### Multiple Pipelines
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 // Create multiple pipelines
 const classifier = await pipeline('text-classification');
@@ -127,7 +127,7 @@ const [classification, features] = await Promise.all([
 ### Image Classification
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const classifier = await pipeline('image-classification');
 
@@ -145,7 +145,7 @@ const results = await classifier.run([img1, img2, img3]);
 ### Text Generation (Streaming)
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const generator = await pipeline('text-generation');
 
@@ -166,7 +166,7 @@ for await (const event of generator.stream('Hello, ')) {
 ### Zero-shot Classification
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const classifier = await pipeline('zero-shot-classification');
 
@@ -182,7 +182,7 @@ console.log(result.labels[0], result.scores[0]);
 ### Question Answering
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const qa = await pipeline('question-answering');
 
@@ -197,7 +197,7 @@ console.log(result.answer); // 'Paris'
 ### Named Entity Recognition (NER)
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 const ner = await pipeline('token-classification');
 
@@ -217,7 +217,7 @@ console.log(entities);
 ### Load from HuggingFace Hub
 
 ```typescript
-import { fromHub, fromTask } from 'WebInferjs';
+import { fromHub, fromTask } from 'webinfer-js';
 
 // Load by model ID (auto-downloads model, tokenizer, config)
 const bundle = await fromHub('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
@@ -231,7 +231,7 @@ const sentimentBundle = await fromTask('sentiment-analysis');
 ### Web Workers (Background Inference)
 
 ```typescript
-import { runInWorker, WorkerPool, isWorkerSupported } from 'WebInferjs';
+import { runInWorker, WorkerPool, isWorkerSupported } from 'webinfer-js';
 
 // Simple: run inference in background thread
 if (isWorkerSupported()) {
@@ -283,7 +283,7 @@ pool.terminate();
 ### Runtime Selection
 
 ```typescript
-import { pipeline } from 'WebInferjs';
+import { pipeline } from 'webinfer-js';
 
 // Automatic (recommended)
 const model = await pipeline('text-classification');
@@ -297,7 +297,7 @@ const model = await pipeline('text-classification', {
 ### Memory Management
 
 ```typescript
-import { pipeline, getMemoryStats, gc } from 'WebInferjs';
+import { pipeline, getMemoryStats, gc } from 'webinfer-js';
 
 const model = await pipeline('text-classification');
 
@@ -318,7 +318,7 @@ gc();
 ### Scheduler Configuration
 
 ```typescript
-import { configureScheduler } from 'WebInferjs';
+import { configureScheduler } from 'webinfer-js';
 
 configureScheduler({
   maxConcurrentTasks: 4,
@@ -332,7 +332,7 @@ configureScheduler({
 ### Caching
 
 ```typescript
-import { pipeline, Cache } from 'WebInferjs';
+import { pipeline, Cache } from 'webinfer-js';
 
 // Create a cache
 const cache = new Cache({
@@ -351,7 +351,7 @@ const model = await pipeline('text-classification', {
 ### Custom Model Loading
 
 ```typescript
-import { loadModel, runInference } from 'WebInferjs';
+import { loadModel, runInference } from 'webinfer-js';
 
 // Load from URL with caching, sharding, and resume support
 const model = await loadModel('https://example.com/model.bin', {
@@ -373,7 +373,7 @@ model.dispose();
 ### Preloading Models
 
 ```typescript
-import { preloadModel, preloadModels, getPreloadStatus } from 'WebInferjs';
+import { preloadModel, preloadModels, getPreloadStatus } from 'webinfer-js';
 
 // Preload a single model in background (with priority)
 preloadModel('https://example.com/model1.onnx', { priority: 10 });
@@ -398,7 +398,7 @@ import {
   deleteCachedModel, 
   clearModelCache,
   getModelCacheStats 
-} from 'WebInferjs';
+} from 'webinfer-js';
 
 // Check if model is cached
 if (await isModelCached('https://example.com/model.onnx')) {
@@ -424,7 +424,7 @@ console.log(`${stats.models} models cached, ${stats.totalSize} bytes total`);
 Large model downloads automatically support resuming from where they left off:
 
 ```typescript
-import { loadModelData } from 'WebInferjs';
+import { loadModelData } from 'webinfer-js';
 
 // Download with progress and resume support
 const modelData = await loadModelData('https://example.com/large-model.onnx', {
@@ -443,7 +443,7 @@ const modelData = await loadModelData('https://example.com/large-model.onnx', {
 ### Model Quantization
 
 ```typescript
-import { quantize } from 'WebInferjs/tools';
+import { quantize } from 'webinfer-js/tools';
 
 const quantized = await quantize(model, {
   method: 'int8',
@@ -457,7 +457,7 @@ console.log(`Compression: ${quantized.compressionRatio}x`);
 ### Benchmarking
 
 ```typescript
-import { benchmark } from 'WebInferjs/tools';
+import { benchmark } from 'webinfer-js/tools';
 
 const result = await benchmark(
   () => model.run('sample text'),
@@ -476,7 +476,7 @@ console.log(result);
 ### Memory Scope
 
 ```typescript
-import { withMemoryScope, tensor } from 'WebInferjs';
+import { withMemoryScope, tensor } from 'webinfer-js';
 
 const result = await withMemoryScope(async (scope) => {
   // Tensors tracked in scope
@@ -495,7 +495,7 @@ const result = await withMemoryScope(async (scope) => {
 ## 🔌 Tensor Operations
 
 ```typescript
-import { tensor, zeros, ones, matmul, softmax, relu } from 'WebInferjs';
+import { tensor, zeros, ones, matmul, softmax, relu } from 'webinfer-js';
 
 // Create tensors
 const a = tensor([[1, 2], [3, 4]]);
