@@ -4,11 +4,11 @@
  * In-browser model quantization and compression utilities.
  * Supports dynamic quantization (no calibration data needed).
  */
-import { WebInferTensor } from '../core/index.js';
+import { WebInferTensor } from "../core/index.js";
 /**
  * Quantization type
  */
-export type QuantizationType = 'int8' | 'uint8' | 'int4' | 'float16' | 'dynamic';
+export type QuantizationType = "int8" | "uint8" | "int4" | "float16" | "dynamic";
 /**
  * Quantization options
  */
@@ -32,7 +32,7 @@ export interface QuantizationOptions {
  * Quantization progress
  */
 export interface QuantizationProgress {
-    stage: 'analyzing' | 'quantizing' | 'packing' | 'complete';
+    stage: "analyzing" | "quantizing" | "packing" | "complete";
     current: number;
     total: number;
     percent: number;
@@ -128,7 +128,7 @@ export interface PruningOptions {
     /** Pruning ratio (0-1, default: 0.5 = 50% sparsity) */
     ratio?: number;
     /** Pruning method */
-    method?: 'magnitude' | 'random' | 'structured';
+    method?: "magnitude" | "random" | "structured";
     /** For structured pruning: dimension to prune along */
     dim?: number;
     /** Minimum absolute value to keep */
@@ -204,7 +204,7 @@ export declare function analyzeModel(modelData: ArrayBuffer): Promise<ModelAnaly
 /**
  * Export format
  */
-export type ExportFormat = 'onnx' | 'tflite' | 'WebInfer';
+export type ExportFormat = "onnx" | "tflite" | "WebInfer";
 /**
  * Export options
  */

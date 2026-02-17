@@ -3,11 +3,11 @@
  *
  * Run inference in a Web Worker to avoid blocking the main thread.
  */
-import type { Tensor, RuntimeType } from './types.js';
+import type { Tensor, RuntimeType } from "./types.js";
 /**
  * Worker message types
  */
-export type WorkerMessageType = 'init' | 'load_model' | 'run_inference' | 'dispose' | 'ready' | 'result' | 'error' | 'progress';
+export type WorkerMessageType = "init" | "load_model" | "run_inference" | "dispose" | "ready" | "result" | "error" | "progress";
 /**
  * Worker message structure
  */

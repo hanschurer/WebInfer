@@ -1,15 +1,15 @@
 /**
  * WebInfer.js - Text Generation Pipeline
- * 
+ *
  * Autoregressive text generation with streaming support.
  * Supports GPT-2, LLaMA, Mistral, and other causal LM models.
  */
 
-import { BasePipeline, PipelineResult } from './base.js';
-import { Tokenizer } from '../utils/tokenizer.js';
-import { WebInferTensor, softmax } from '../core/tensor.js';
-import { PipelineConfig, PipelineOptions } from '../core/types.js';
-import { runInference } from '../core/runtime.js';
+import { BasePipeline, PipelineResult } from "./base.js";
+import { Tokenizer } from "../utils/tokenizer.js";
+import { WebInferTensor, softmax } from "../core/tensor.js";
+import { PipelineConfig, PipelineOptions } from "../core/types.js";
+import { runInference } from "../core/runtime.js";
 
 // ============================================================================
 // Types
@@ -79,30 +79,35 @@ export interface GenerationStreamEvent {
 
 /**
  * TextGenerationPipeline - Autoregressive text generation
- * 
+ *
  * @example
  * ```typescript
  * const generator = await pipeline('text-generation', 'Xenova/gpt2');
- * 
+ *
  * // Simple generation
  * const result = await generator.run('Once upon a time');
  * console.log(result.generatedText);
- * 
+ *
  * // Streaming generation
  * for await (const event of generator.stream('Hello, ')) {
  *   process.stdout.write(event.token);
  * }
  * ```
  */
-export class TextGenerationPipeline extends BasePipeline<string | string[], TextGenerationResult | TextGenerationResult[]> {
+export class TextGenerationPipeline extends BasePipeline<
+  string | string[],
+  TextGenerationResult | TextGenerationResult[]
+> {
   private tokenizer: Tokenizer | null = null;
   private eosTokenId: number = 50256; // GPT-2 default
 
   constructor(config?: PipelineConfig) {
-    super(config ?? {
-      task: 'text-generation',
-      model: 'default',
-    });
+    super(
+      config ?? {
+        task: "text-generation",
+        model: "default",
+      },
+    );
   }
 
   /**
@@ -117,22 +122,26 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
   /**
    * Preprocess - not used for text generation (handled in generateSingle)
    */
-  protected async preprocess(input: string | string[]): Promise<WebInferTensor[]> {
+  protected async preprocess(
+    input: string | string[],
+  ): Promise<WebInferTensor[]> {
     // For text generation, preprocessing is handled in generateNextToken
-    const text = Array.isArray(input) ? input[0] ?? '' : input;
+    const text = Array.isArray(input) ? (input[0] ?? "") : input;
     if (!this.tokenizer) {
       // Return dummy tensor if no tokenizer
-      return [new WebInferTensor(new Float32Array([0]), [1], 'float32')];
+      return [new WebInferTensor(new Float32Array([0]), [1], "float32")];
     }
     const encoded = this.tokenizer.encode(text, {
       addSpecialTokens: false,
-      padding: 'do_not_pad',
+      padding: "do_not_pad",
     });
-    return [new WebInferTensor(
-      BigInt64Array.from(encoded.inputIds.map(id => BigInt(id))),
-      [1, encoded.inputIds.length],
-      'int64'
-    )];
+    return [
+      new WebInferTensor(
+        BigInt64Array.from(encoded.inputIds.map((id) => BigInt(id))),
+        [1, encoded.inputIds.length],
+        "int64",
+      ),
+    ];
   }
 
   /**
@@ -140,11 +149,11 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
    */
   protected async postprocess(
     _outputs: WebInferTensor[],
-    _options?: PipelineOptions
+    _options?: PipelineOptions,
   ): Promise<TextGenerationResult | TextGenerationResult[]> {
     // For text generation, postprocessing is handled in generateSingle
     return {
-      generatedText: '',
+      generatedText: "",
       tokenIds: [],
       numTokens: 0,
       processingTime: 0,
@@ -156,13 +165,13 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
    */
   override async run(
     prompt: string | string[],
-    options?: PipelineOptions & TextGenerationOptions
+    options?: PipelineOptions & TextGenerationOptions,
   ): Promise<TextGenerationResult | TextGenerationResult[]> {
     await this.initialize();
-    
+
     const prompts = Array.isArray(prompt) ? prompt : [prompt];
     const results = await Promise.all(
-      prompts.map(p => this.generateSingle(p, options ?? {}))
+      prompts.map((p) => this.generateSingle(p, options ?? {})),
     );
     return Array.isArray(prompt) ? results : results[0]!;
   }
@@ -172,12 +181,12 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
    */
   async *stream(
     prompt: string,
-    options: TextGenerationOptions = {}
+    options: TextGenerationOptions = {},
   ): AsyncGenerator<GenerationStreamEvent> {
     const startTime = performance.now();
-    
+
     if (!this.tokenizer) {
-      throw new Error('Tokenizer not set. Call setTokenizer() first.');
+      throw new Error("Tokenizer not set. Call setTokenizer() first.");
     }
 
     const {
@@ -194,13 +203,13 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     // Encode prompt
     const encoded = this.tokenizer.encode(prompt, {
       addSpecialTokens: false,
-      padding: 'do_not_pad',
+      padding: "do_not_pad",
       truncation: false,
     });
 
-    let inputIds = [...encoded.inputIds];
+    const inputIds = [...encoded.inputIds];
     const generatedIds: number[] = [];
-    let generatedText = '';
+    let generatedText = "";
 
     // Generation loop
     for (let i = 0; i < maxNewTokens; i++) {
@@ -214,13 +223,13 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
         topK,
         topP,
         repetitionPenalty,
-        doSample
+        doSample,
       );
 
       // Check for EOS
       if (nextTokenId === this.eosTokenId) {
         yield {
-          token: '',
+          token: "",
           tokenId: nextTokenId,
           generatedText,
           done: true,
@@ -261,7 +270,9 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
 
     // Final event
     const endTime = performance.now();
-    console.log(`Generation completed in ${(endTime - startTime).toFixed(2)}ms`);
+    console.log(
+      `Generation completed in ${(endTime - startTime).toFixed(2)}ms`,
+    );
   }
 
   /**
@@ -269,12 +280,12 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
    */
   private async generateSingle(
     prompt: string,
-    options: TextGenerationOptions
+    options: TextGenerationOptions,
   ): Promise<TextGenerationResult> {
     const startTime = performance.now();
-    
+
     if (!this.tokenizer) {
-      throw new Error('Tokenizer not set. Call setTokenizer() first.');
+      throw new Error("Tokenizer not set. Call setTokenizer() first.");
     }
 
     const {
@@ -292,11 +303,11 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     // Encode prompt
     const encoded = this.tokenizer.encode(prompt, {
       addSpecialTokens: false,
-      padding: 'do_not_pad',
+      padding: "do_not_pad",
       truncation: false,
     });
 
-    let inputIds = [...encoded.inputIds];
+    const inputIds = [...encoded.inputIds];
     const generatedIds: number[] = [];
 
     // Generation loop
@@ -311,7 +322,7 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
         topK,
         topP,
         repetitionPenalty,
-        doSample
+        doSample,
       );
 
       // Check for EOS
@@ -361,42 +372,45 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     topK: number,
     topP: number,
     repetitionPenalty: number,
-    doSample: boolean
+    doSample: boolean,
   ): Promise<number> {
     if (!this.model) {
-      throw new Error('Model not loaded');
+      throw new Error("Model not loaded");
     }
 
     // Prepare input tensor
     const inputTensor = new WebInferTensor(
-      BigInt64Array.from(inputIds.map(id => BigInt(id))),
+      BigInt64Array.from(inputIds.map((id) => BigInt(id))),
       [1, inputIds.length],
-      'int64'
+      "int64",
     );
 
     // Create attention mask
     const attentionMask = new WebInferTensor(
       BigInt64Array.from(inputIds.map(() => BigInt(1))),
       [1, inputIds.length],
-      'int64'
+      "int64",
     );
 
     // Run inference
-    const outputs = await runInference(this.model, [inputTensor, attentionMask]);
-    
+    const outputs = await runInference(this.model, [
+      inputTensor,
+      attentionMask,
+    ]);
+
     if (!outputs || outputs.length === 0) {
-      throw new Error('Model returned no outputs');
+      throw new Error("Model returned no outputs");
     }
 
     // Get logits for last token
     const logits = outputs[0]!;
     const logitsData = logits.toFloat32Array();
     const vocabSize = logits.shape[logits.shape.length - 1] ?? 50257;
-    
+
     // Get logits for the last position
     const lastPositionLogits = new Float32Array(vocabSize);
     const offset = (inputIds.length - 1) * vocabSize;
-    
+
     for (let i = 0; i < vocabSize; i++) {
       lastPositionLogits[i] = logitsData[offset + i] ?? 0;
     }
@@ -406,9 +420,8 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
       for (const prevId of inputIds) {
         if (prevId < vocabSize) {
           const score = lastPositionLogits[prevId] ?? 0;
-          lastPositionLogits[prevId] = score > 0 
-            ? score / repetitionPenalty 
-            : score * repetitionPenalty;
+          lastPositionLogits[prevId] =
+            score > 0 ? score / repetitionPenalty : score * repetitionPenalty;
         }
       }
     }
@@ -421,7 +434,11 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     }
 
     // Convert to probabilities
-    const logitsTensor = new WebInferTensor(lastPositionLogits, [vocabSize], 'float32');
+    const logitsTensor = new WebInferTensor(
+      lastPositionLogits,
+      [vocabSize],
+      "float32",
+    );
     const probs = softmax(logitsTensor).toFloat32Array();
 
     // Sample or greedy
@@ -438,14 +455,14 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
   private greedy(probs: Float32Array): number {
     let maxIdx = 0;
     let maxProb = probs[0] ?? 0;
-    
+
     for (let i = 1; i < probs.length; i++) {
       if ((probs[i] ?? 0) > maxProb) {
         maxProb = probs[i] ?? 0;
         maxIdx = i;
       }
     }
-    
+
     return maxIdx;
   }
 
@@ -467,13 +484,13 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     if (topP < 1.0) {
       let cumulativeProb = 0;
       const filtered: number[] = [];
-      
+
       for (const idx of candidateIndices) {
         filtered.push(idx);
         cumulativeProb += probs[idx] ?? 0;
         if (cumulativeProb >= topP) break;
       }
-      
+
       candidateIndices = filtered;
     }
 
@@ -486,7 +503,7 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     // Sample
     const r = Math.random() * totalProb;
     let cumulative = 0;
-    
+
     for (const idx of candidateIndices) {
       cumulative += probs[idx] ?? 0;
       if (cumulative >= r) {
@@ -497,7 +514,6 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
     // Fallback
     return candidateIndices[0] ?? 0;
   }
-
 }
 
 // ============================================================================
@@ -507,6 +523,8 @@ export class TextGenerationPipeline extends BasePipeline<string | string[], Text
 /**
  * Create text generation pipeline
  */
-export function createTextGenerationPipeline(config?: PipelineConfig): TextGenerationPipeline {
+export function createTextGenerationPipeline(
+  config?: PipelineConfig,
+): TextGenerationPipeline {
   return new TextGenerationPipeline(config);
 }

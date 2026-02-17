@@ -68,7 +68,7 @@ export declare function preloadModel(url: string, options?: PreloadOptions): Pro
 export declare function preloadModels(urls: Array<{
     url: string;
     priority?: number;
-}>, options?: Omit<PreloadOptions, 'priority'>): Promise<ArrayBuffer[]>;
+}>, options?: Omit<PreloadOptions, "priority">): Promise<ArrayBuffer[]>;
 /**
  * Check if a model is cached
  */
@@ -95,7 +95,7 @@ export declare function getModelCacheStats(): Promise<{
 /**
  * Get preload status
  */
-export declare function getPreloadStatus(url: string): 'pending' | 'loading' | 'complete' | 'error' | 'not_found';
+export declare function getPreloadStatus(url: string): "pending" | "loading" | "complete" | "error" | "not_found";
 /**
  * Cancel a preload
  */

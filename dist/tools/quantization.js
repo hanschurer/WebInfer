@@ -4,7 +4,7 @@
  * In-browser model quantization and compression utilities.
  * Supports dynamic quantization (no calibration data needed).
  */
-import { WebInferTensor } from '../core/index.js';
+import { WebInferTensor } from "../core/index.js";
 // ============================================================================
 // Quantization Core
 // ============================================================================
@@ -46,7 +46,12 @@ function calculateQuantParams(data, bits, symmetric, perChannel, channelAxis = 0
             if (scales[c] === 0)
                 scales[c] = 1;
         }
-        return { scale: scales, zeroPoint: zeroPoints, min: globalMin, max: globalMax };
+        return {
+            scale: scales,
+            zeroPoint: zeroPoints,
+            min: globalMin,
+            max: globalMax,
+        };
     }
     else {
         // Per-tensor quantization
@@ -250,7 +255,7 @@ export function float16ToFloat32(value) {
         }
         return NaN;
     }
-    return (sign === 0 ? 1 : -1) * Math.pow(2, exponent - 15) * (1 + mantissa / 1024);
+    return ((sign === 0 ? 1 : -1) * Math.pow(2, exponent - 15) * (1 + mantissa / 1024));
 }
 /**
  * Dequantize float16 data back to float32
@@ -276,10 +281,10 @@ function parseModelWeights(modelData) {
     // Create a single weight tensor from the model data
     // This is a placeholder - real implementation would parse ONNX properly
     weights.push({
-        name: 'model_weights',
+        name: "model_weights",
         data: float32Array,
         shape: [float32Array.length],
-        dtype: 'float32',
+        dtype: "float32",
     });
     return weights;
 }
@@ -289,7 +294,7 @@ function parseModelWeights(modelData) {
 function serializeQuantizedModel(model) {
     // Create a simple binary format:
     // Header: version (4 bytes) + type (4 bytes) + originalSize (8 bytes) + numWeights (4 bytes)
-    // For each weight: nameLen (4) + name + shapeLen (4) + shape + dtypeLen (4) + dtype + 
+    // For each weight: nameLen (4) + name + shapeLen (4) + shape + dtypeLen (4) + dtype +
     //                  origDtypeLen (4) + origDtype + hasScale (1) + scale + hasZP (1) + zp + dataLen (8) + data
     const encoder = new TextEncoder();
     // Calculate total size
@@ -304,11 +309,15 @@ function serializeQuantizedModel(model) {
         totalSize += 4 + origDtypeBytes.length; // originalDtype
         totalSize += 1; // hasScale
         if (weight.scale !== undefined) {
-            totalSize += Array.isArray(weight.scale) ? 4 + weight.scale.length * 4 : 4;
+            totalSize += Array.isArray(weight.scale)
+                ? 4 + weight.scale.length * 4
+                : 4;
         }
         totalSize += 1; // hasZeroPoint
         if (weight.zeroPoint !== undefined) {
-            totalSize += Array.isArray(weight.zeroPoint) ? 4 + weight.zeroPoint.length * 4 : 4;
+            totalSize += Array.isArray(weight.zeroPoint)
+                ? 4 + weight.zeroPoint.length * 4
+                : 4;
         }
         totalSize += 8 + weight.data.byteLength; // data
     }
@@ -319,10 +328,10 @@ function serializeQuantizedModel(model) {
     // Write header
     view.setUint32(offset, model.version, true);
     offset += 4;
-    view.setUint32(offset, ['int8', 'uint8', 'int4', 'float16', 'dynamic'].indexOf(model.quantizationType), true);
+    view.setUint32(offset, ["int8", "uint8", "int4", "float16", "dynamic"].indexOf(model.quantizationType), true);
     offset += 4;
     // Write originalSize as two 32-bit integers (for 64-bit compatibility)
-    view.setUint32(offset, model.originalSize & 0xFFFFFFFF, true);
+    view.setUint32(offset, model.originalSize & 0xffffffff, true);
     offset += 4;
     view.setUint32(offset, (model.originalSize / 0x100000000) >>> 0, true);
     offset += 4;
@@ -402,7 +411,7 @@ function serializeQuantizedModel(model) {
             offset += 1;
         }
         // Data
-        const dataLow = weight.data.byteLength & 0xFFFFFFFF;
+        const dataLow = weight.data.byteLength & 0xffffffff;
         const dataHigh = (weight.data.byteLength / 0x100000000) >>> 0;
         view.setUint32(offset, dataLow, true);
         offset += 4;
@@ -423,7 +432,7 @@ export async function quantizeModel(modelData, options) {
     let tensorsQuantized = 0;
     let tensorsSkipped = 0;
     // Parse model weights
-    onProgress?.({ stage: 'analyzing', current: 0, total: 1, percent: 0 });
+    onProgress?.({ stage: "analyzing", current: 0, total: 1, percent: 0 });
     const weights = parseModelWeights(modelData);
     const quantizedWeights = [];
     let totalParams = 0;
@@ -434,7 +443,7 @@ export async function quantizeModel(modelData, options) {
         const weight = weights[i];
         const percent = ((i + 1) / weights.length) * 100;
         onProgress?.({
-            stage: 'quantizing',
+            stage: "quantizing",
             current: i + 1,
             total: weights.length,
             percent,
@@ -443,8 +452,8 @@ export async function quantizeModel(modelData, options) {
         totalParams += weight.data.length;
         // Check if should skip
         const shouldSkip = weight.data.length < minTensorSize ||
-            skipPatterns.some(pattern => {
-                if (typeof pattern === 'string') {
+            skipPatterns.some((pattern) => {
+                if (typeof pattern === "string") {
                     return weight.name.includes(pattern);
                 }
                 return pattern.test(weight.name);
@@ -463,8 +472,8 @@ export async function quantizeModel(modelData, options) {
                 maxValue: Math.max(...weight.data),
                 skipped: true,
                 skipReason: weight.data.length < minTensorSize
-                    ? 'Tensor too small'
-                    : 'Matched skip pattern',
+                    ? "Tensor too small"
+                    : "Matched skip pattern",
             });
             quantizedWeights.push({
                 name: weight.name,
@@ -476,39 +485,50 @@ export async function quantizeModel(modelData, options) {
             continue;
         }
         // Calculate quantization parameters
-        const bits = type === 'int4' ? 4 : 8;
+        const bits = type === "int4" ? 4 : 8;
         const params = calculateQuantParams(weight.data, bits, symmetric, perChannel, 0, weight.shape);
         // Quantize data
         let quantizedData;
         let quantizedDtype;
         switch (type) {
-            case 'int8':
-                const int8Data = quantizeToInt8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel ? weight.data.length / (weight.shape[0] ?? 1) : weight.data.length);
+            case "int8": {
+                const int8Data = quantizeToInt8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel
+                    ? weight.data.length / (weight.shape[0] ?? 1)
+                    : weight.data.length);
                 quantizedData = int8Data.buffer.slice(0);
-                quantizedDtype = 'int8';
+                quantizedDtype = "int8";
                 break;
-            case 'uint8':
-                const uint8Data = quantizeToUint8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel ? weight.data.length / (weight.shape[0] ?? 1) : weight.data.length);
+            }
+            case "uint8": {
+                const uint8Data = quantizeToUint8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel
+                    ? weight.data.length / (weight.shape[0] ?? 1)
+                    : weight.data.length);
                 quantizedData = uint8Data.buffer.slice(0);
-                quantizedDtype = 'uint8';
+                quantizedDtype = "uint8";
                 break;
-            case 'int4':
+            }
+            case "int4": {
                 const int4Data = quantizeToInt4(weight.data, params.scale, params.zeroPoint);
                 quantizedData = int4Data.buffer.slice(0);
-                quantizedDtype = 'int4';
+                quantizedDtype = "int4";
                 break;
-            case 'float16':
+            }
+            case "float16": {
                 const fp16Data = quantizeToFloat16(weight.data);
                 quantizedData = fp16Data.buffer.slice(0);
-                quantizedDtype = 'float16';
+                quantizedDtype = "float16";
                 break;
-            case 'dynamic':
-            default:
+            }
+            case "dynamic":
+            default: {
                 // Dynamic quantization: use int8 for weights
-                const dynData = quantizeToInt8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel ? weight.data.length / (weight.shape[0] ?? 1) : weight.data.length);
+                const dynData = quantizeToInt8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel
+                    ? weight.data.length / (weight.shape[0] ?? 1)
+                    : weight.data.length);
                 quantizedData = dynData.buffer.slice(0);
-                quantizedDtype = 'int8';
+                quantizedDtype = "int8";
                 break;
+            }
         }
         tensorsQuantized++;
         quantizedParams += weight.data.length;
@@ -518,7 +538,7 @@ export async function quantizeModel(modelData, options) {
         const zpValue = params.zeroPoint instanceof Int32Array
             ? Array.from(params.zeroPoint)
             : params.zeroPoint;
-        if (typeof scaleValue === 'number') {
+        if (typeof scaleValue === "number") {
             scales.push(scaleValue);
         }
         else {
@@ -547,7 +567,7 @@ export async function quantizeModel(modelData, options) {
         });
     }
     // Pack into final format
-    onProgress?.({ stage: 'packing', current: 0, total: 1, percent: 0 });
+    onProgress?.({ stage: "packing", current: 0, total: 1, percent: 0 });
     const quantizedModel = {
         version: 1,
         quantizationType: type,
@@ -555,15 +575,13 @@ export async function quantizeModel(modelData, options) {
         weights: quantizedWeights,
     };
     const quantizedData = serializeQuantizedModel(quantizedModel);
-    onProgress?.({ stage: 'complete', current: 1, total: 1, percent: 100 });
+    onProgress?.({ stage: "complete", current: 1, total: 1, percent: 100 });
     // Calculate statistics
-    const avgScale = scales.length > 0
-        ? scales.reduce((a, b) => a + b, 0) / scales.length
-        : 1;
+    const avgScale = scales.length > 0 ? scales.reduce((a, b) => a + b, 0) / scales.length : 1;
     const minScale = scales.length > 0 ? Math.min(...scales) : 1;
     const maxScale = scales.length > 0 ? Math.max(...scales) : 1;
     // Estimate quantization error (very rough approximation)
-    const bitsReduction = type === 'int4' ? 8 : type === 'float16' ? 2 : 4;
+    const bitsReduction = type === "int4" ? 8 : type === "float16" ? 2 : 4;
     const errorEstimate = avgScale / bitsReduction;
     return {
         data: quantizedData,
@@ -593,26 +611,26 @@ export function quantizeTensor(tensor, type, options = {}) {
     const { symmetric = true, perChannel = false } = options;
     const data = tensor.toFloat32Array();
     const shape = tensor.shape;
-    const bits = type === 'int4' ? 4 : 8;
+    const bits = type === "int4" ? 4 : 8;
     const params = calculateQuantParams(data, bits, symmetric, perChannel, 0, shape);
     let quantizedData;
     let dtype;
     switch (type) {
-        case 'int8':
+        case "int8":
             quantizedData = quantizeToInt8(data, params.scale, params.zeroPoint, perChannel);
-            dtype = 'int32'; // Store as int32 since we don't have int8 dtype
+            dtype = "int32"; // Store as int32 since we don't have int8 dtype
             break;
-        case 'uint8':
+        case "uint8":
             quantizedData = quantizeToUint8(data, params.scale, params.zeroPoint, perChannel);
-            dtype = 'int32';
+            dtype = "int32";
             break;
-        case 'float16':
+        case "float16":
             quantizedData = quantizeToFloat16(data);
-            dtype = 'float32'; // Will be stored differently
+            dtype = "float32"; // Will be stored differently
             break;
         default:
             quantizedData = quantizeToInt8(data, params.scale, params.zeroPoint, perChannel);
-            dtype = 'int32';
+            dtype = "int32";
     }
     const scaleValue = params.scale instanceof Float32Array
         ? Array.from(params.scale)
@@ -634,38 +652,42 @@ export function dequantizeTensor(tensor, scale, zeroPoint, type) {
     const shape = tensor.shape;
     let dequantizedData;
     const scaleArr = Array.isArray(scale) ? new Float32Array(scale) : scale;
-    const zpArr = Array.isArray(zeroPoint) ? new Int32Array(zeroPoint) : zeroPoint;
+    const zpArr = Array.isArray(zeroPoint)
+        ? new Int32Array(zeroPoint)
+        : zeroPoint;
     const perChannel = Array.isArray(scale);
     switch (type) {
-        case 'int8':
+        case "int8":
             dequantizedData = dequantizeInt8(new Int8Array(data.map(Number)), scaleArr, zpArr, perChannel);
             break;
-        case 'uint8':
+        case "uint8":
             dequantizedData = dequantizeUint8(new Uint8Array(data.map(Number)), scaleArr, zpArr, perChannel);
             break;
-        case 'float16':
+        case "float16":
             dequantizedData = dequantizeFloat16(new Uint16Array(data.map(Number)));
             break;
         default:
             dequantizedData = dequantizeInt8(new Int8Array(data.map(Number)), scaleArr, zpArr, perChannel);
     }
-    return new WebInferTensor(Array.from(dequantizedData), shape, 'float32');
+    return new WebInferTensor(Array.from(dequantizedData), shape, "float32");
 }
 /**
  * Prune a tensor using magnitude-based pruning
  */
 export function pruneTensor(tensor, options = {}) {
-    const { ratio = 0.5, method = 'magnitude', threshold } = options;
+    const { ratio = 0.5, method = "magnitude", threshold } = options;
     const data = tensor.toFloat32Array();
     const shape = tensor.shape;
     const mask = new Float32Array(data.length);
     const prunedData = new Float32Array(data.length);
     let prunedCount = 0;
-    if (method === 'magnitude') {
+    if (method === "magnitude") {
         // Get threshold based on ratio
-        const absValues = Array.from(data).map(Math.abs).sort((a, b) => a - b);
+        const absValues = Array.from(data)
+            .map(Math.abs)
+            .sort((a, b) => a - b);
         const thresholdIndex = Math.floor(absValues.length * ratio);
-        const computedThreshold = threshold ?? (absValues[thresholdIndex] ?? 0);
+        const computedThreshold = threshold ?? absValues[thresholdIndex] ?? 0;
         for (let i = 0; i < data.length; i++) {
             if (Math.abs(data[i] ?? 0) > computedThreshold) {
                 mask[i] = 1;
@@ -678,7 +700,7 @@ export function pruneTensor(tensor, options = {}) {
             }
         }
     }
-    else if (method === 'random') {
+    else if (method === "random") {
         for (let i = 0; i < data.length; i++) {
             if (Math.random() > ratio) {
                 mask[i] = 1;
@@ -692,8 +714,8 @@ export function pruneTensor(tensor, options = {}) {
         }
     }
     return {
-        tensor: new WebInferTensor(Array.from(prunedData), shape, 'float32'),
-        mask: new WebInferTensor(Array.from(mask), shape, 'float32'),
+        tensor: new WebInferTensor(Array.from(prunedData), shape, "float32"),
+        mask: new WebInferTensor(Array.from(mask), shape, "float32"),
         sparsity: prunedCount / data.length,
     };
 }
@@ -710,7 +732,7 @@ export async function pruneModel(modelData, options = {}) {
     let prunedParams = 0;
     for (const weight of weights) {
         totalParams += weight.data.length;
-        const tensor = new WebInferTensor(Array.from(weight.data), weight.shape, 'float32');
+        const tensor = new WebInferTensor(Array.from(weight.data), weight.shape, "float32");
         const { sparsity } = pruneTensor(tensor, options);
         prunedParams += Math.floor(weight.data.length * sparsity);
     }
@@ -735,9 +757,12 @@ export async function analyzeModel(modelData) {
     const tensorInfos = [];
     for (const weight of weights) {
         totalParams += weight.data.length;
-        const bytesPerElement = weight.dtype === 'float32' ? 4
-            : weight.dtype === 'float16' ? 2
-                : weight.dtype === 'int8' ? 1
+        const bytesPerElement = weight.dtype === "float32"
+            ? 4
+            : weight.dtype === "float16"
+                ? 2
+                : weight.dtype === "int8"
+                    ? 1
                     : 4;
         const size = weight.data.length * bytesPerElement;
         if (!dtypeBreakdown[weight.dtype]) {
@@ -763,15 +788,15 @@ export async function analyzeModel(modelData) {
         dynamic: Math.ceil(totalSize / 4),
     };
     // Recommend quantization based on model size
-    let recommendedQuantization = 'dynamic';
+    let recommendedQuantization = "dynamic";
     if (totalSize > 500 * 1024 * 1024) {
-        recommendedQuantization = 'int4';
+        recommendedQuantization = "int4";
     }
     else if (totalSize > 100 * 1024 * 1024) {
-        recommendedQuantization = 'int8';
+        recommendedQuantization = "int8";
     }
     else if (totalSize > 50 * 1024 * 1024) {
-        recommendedQuantization = 'float16';
+        recommendedQuantization = "float16";
     }
     return {
         totalSize,
@@ -799,12 +824,12 @@ export async function exportModel(modelData, options) {
     // Format conversion would happen here
     // For now, we just return the (possibly quantized) data
     switch (format) {
-        case 'WebInfer':
+        case "WebInfer":
             return data;
-        case 'onnx':
+        case "onnx":
             // Would convert to ONNX format
             return data;
-        case 'tflite':
+        case "tflite":
             // Would convert to TFLite format
             return data;
         default:

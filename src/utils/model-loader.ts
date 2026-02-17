@@ -1,6 +1,6 @@
 /**
  * WebInfer.js - Advanced Model Loader
- * 
+ *
  * Features:
  * - Preloading: Background model loading
  * - Sharding: Split large files into chunks for download
@@ -100,11 +100,11 @@ interface ChunkState {
 // IndexedDB Model Cache
 // ============================================================================
 
-const DB_NAME = 'WebInfer-model-cache';
+const DB_NAME = "WebInfer-model-cache";
 const DB_VERSION = 1;
-const STORE_META = 'meta';
-const STORE_CHUNKS = 'chunks';
-const STORE_STATE = 'download-state';
+const STORE_META = "meta";
+const STORE_CHUNKS = "chunks";
+const STORE_STATE = "download-state";
 
 /**
  * IndexedDB-based model cache for large files
@@ -122,24 +122,26 @@ class ModelCache {
 
     this.dbPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      
+
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
+
         // Model metadata store
         if (!db.objectStoreNames.contains(STORE_META)) {
-          db.createObjectStore(STORE_META, { keyPath: 'url' });
+          db.createObjectStore(STORE_META, { keyPath: "url" });
         }
-        
+
         // Chunk data store
         if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
-          const chunkStore = db.createObjectStore(STORE_CHUNKS, { keyPath: ['url', 'index'] });
-          chunkStore.createIndex('url', 'url', { unique: false });
+          const chunkStore = db.createObjectStore(STORE_CHUNKS, {
+            keyPath: ["url", "index"],
+          });
+          chunkStore.createIndex("url", "url", { unique: false });
         }
-        
+
         // Download state store (for resume)
         if (!db.objectStoreNames.contains(STORE_STATE)) {
-          db.createObjectStore(STORE_STATE, { keyPath: 'url' });
+          db.createObjectStore(STORE_STATE, { keyPath: "url" });
         }
       };
 
@@ -160,7 +162,7 @@ class ModelCache {
   async getMeta(url: string): Promise<CachedModelMeta | null> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_META, 'readonly');
+      const tx = db.transaction(STORE_META, "readonly");
       const store = tx.objectStore(STORE_META);
       const request = store.get(url);
       request.onsuccess = () => resolve(request.result ?? null);
@@ -174,7 +176,7 @@ class ModelCache {
   async saveMeta(meta: CachedModelMeta): Promise<void> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_META, 'readwrite');
+      const tx = db.transaction(STORE_META, "readwrite");
       const store = tx.objectStore(STORE_META);
       store.put(meta);
       tx.oncomplete = () => resolve();
@@ -185,10 +187,14 @@ class ModelCache {
   /**
    * Save a chunk
    */
-  async saveChunk(url: string, index: number, data: ArrayBuffer): Promise<void> {
+  async saveChunk(
+    url: string,
+    index: number,
+    data: ArrayBuffer,
+  ): Promise<void> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_CHUNKS, 'readwrite');
+      const tx = db.transaction(STORE_CHUNKS, "readwrite");
       const store = tx.objectStore(STORE_CHUNKS);
       store.put({ url, index, data });
       tx.oncomplete = () => resolve();
@@ -202,16 +208,20 @@ class ModelCache {
   async getChunks(url: string): Promise<ArrayBuffer[]> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_CHUNKS, 'readonly');
+      const tx = db.transaction(STORE_CHUNKS, "readonly");
       const store = tx.objectStore(STORE_CHUNKS);
-      const index = store.index('url');
+      const index = store.index("url");
       const request = index.getAll(url);
-      
+
       request.onsuccess = () => {
-        const results = request.result as Array<{ url: string; index: number; data: ArrayBuffer }>;
+        const results = request.result as Array<{
+          url: string;
+          index: number;
+          data: ArrayBuffer;
+        }>;
         // Sort by index and extract data
         results.sort((a, b) => a.index - b.index);
-        resolve(results.map(r => r.data));
+        resolve(results.map((r) => r.data));
       };
       request.onerror = () => reject(request.error);
     });
@@ -231,7 +241,7 @@ class ModelCache {
     const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
     const result = new Uint8Array(totalSize);
     let offset = 0;
-    
+
     for (const chunk of chunks) {
       result.set(new Uint8Array(chunk), offset);
       offset += chunk.byteLength;
@@ -246,7 +256,7 @@ class ModelCache {
   async saveDownloadState(state: DownloadState): Promise<void> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_STATE, 'readwrite');
+      const tx = db.transaction(STORE_STATE, "readwrite");
       const store = tx.objectStore(STORE_STATE);
       store.put(state);
       tx.oncomplete = () => resolve();
@@ -260,7 +270,7 @@ class ModelCache {
   async getDownloadState(url: string): Promise<DownloadState | null> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_STATE, 'readonly');
+      const tx = db.transaction(STORE_STATE, "readonly");
       const store = tx.objectStore(STORE_STATE);
       const request = store.get(url);
       request.onsuccess = () => resolve(request.result ?? null);
@@ -274,7 +284,7 @@ class ModelCache {
   async deleteDownloadState(url: string): Promise<void> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_STATE, 'readwrite');
+      const tx = db.transaction(STORE_STATE, "readwrite");
       const store = tx.objectStore(STORE_STATE);
       store.delete(url);
       tx.oncomplete = () => resolve();
@@ -287,10 +297,10 @@ class ModelCache {
    */
   async deleteModel(url: string): Promise<void> {
     const db = await this.openDB();
-    
+
     // Delete metadata
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_META, 'readwrite');
+      const tx = db.transaction(STORE_META, "readwrite");
       const store = tx.objectStore(STORE_META);
       store.delete(url);
       tx.oncomplete = () => resolve();
@@ -301,19 +311,20 @@ class ModelCache {
     const chunks = await this.getChunks(url);
     if (chunks.length > 0) {
       await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_CHUNKS, 'readwrite');
+        const tx = db.transaction(STORE_CHUNKS, "readwrite");
         const store = tx.objectStore(STORE_CHUNKS);
-        const index = store.index('url');
+        const index = store.index("url");
         const request = index.openCursor(IDBKeyRange.only(url));
-        
+
         request.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue>)
+            .result;
           if (cursor) {
             cursor.delete();
             cursor.continue();
           }
         };
-        
+
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
@@ -328,11 +339,11 @@ class ModelCache {
    */
   async clear(): Promise<void> {
     const db = await this.openDB();
-    
+
     const stores = [STORE_META, STORE_CHUNKS, STORE_STATE];
     for (const storeName of stores) {
       await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readwrite');
+        const tx = db.transaction(storeName, "readwrite");
         const store = tx.objectStore(storeName);
         store.clear();
         tx.oncomplete = () => resolve();
@@ -347,15 +358,18 @@ class ModelCache {
   async getStats(): Promise<{ models: number; totalSize: number }> {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_META, 'readonly');
+      const tx = db.transaction(STORE_META, "readonly");
       const store = tx.objectStore(STORE_META);
       const request = store.getAll();
-      
+
       request.onsuccess = () => {
         const metas = request.result as CachedModelMeta[];
         resolve({
-          models: metas.filter(m => m.complete).length,
-          totalSize: metas.reduce((sum, m) => sum + (m.complete ? m.size : 0), 0),
+          models: metas.filter((m) => m.complete).length,
+          totalSize: metas.reduce(
+            (sum, m) => sum + (m.complete ? m.size : 0),
+            0,
+          ),
         });
       };
       request.onerror = () => reject(request.error);
@@ -373,15 +387,17 @@ const modelCache = new ModelCache();
 /**
  * Check if server supports Range requests
  */
-async function supportsRangeRequests(url: string): Promise<{ supports: boolean; size: number; etag?: string }> {
+async function supportsRangeRequests(
+  url: string,
+): Promise<{ supports: boolean; size: number; etag?: string }> {
   try {
-    const response = await fetch(url, { method: 'HEAD' });
-    const acceptRanges = response.headers.get('Accept-Ranges');
-    const contentLength = response.headers.get('Content-Length');
-    const etag = response.headers.get('ETag') ?? undefined;
-    
+    const response = await fetch(url, { method: "HEAD" });
+    const acceptRanges = response.headers.get("Accept-Ranges");
+    const contentLength = response.headers.get("Content-Length");
+    const etag = response.headers.get("ETag") ?? undefined;
+
     return {
-      supports: acceptRanges === 'bytes',
+      supports: acceptRanges === "bytes",
       size: contentLength ? parseInt(contentLength, 10) : 0,
       etag,
     };
@@ -397,7 +413,7 @@ async function downloadChunk(
   url: string,
   start: number,
   end: number,
-  timeout: number
+  timeout: number,
 ): Promise<ArrayBuffer> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -423,7 +439,7 @@ async function downloadChunk(
  */
 async function downloadWithResume(
   url: string,
-  options: ModelLoaderOptions
+  options: ModelLoaderOptions,
 ): Promise<ArrayBuffer> {
   const {
     chunkSize = 5 * 1024 * 1024, // 5MB
@@ -433,7 +449,11 @@ async function downloadWithResume(
   } = options;
 
   // Check server capabilities
-  const { supports: supportsRange, size: totalSize, etag } = await supportsRangeRequests(url);
+  const {
+    supports: supportsRange,
+    size: totalSize,
+    etag,
+  } = await supportsRangeRequests(url);
 
   // If no Range support or small file, download normally
   if (!supportsRange || totalSize < chunkSize * 2) {
@@ -442,18 +462,18 @@ async function downloadWithResume(
 
   // Check for existing download state
   let state = await modelCache.getDownloadState(url);
-  
+
   // Initialize or reset state if needed
   if (!state || (etag && state.totalSize !== totalSize)) {
     const numChunks = Math.ceil(totalSize / chunkSize);
     const chunks: ChunkState[] = [];
-    
+
     for (let i = 0; i < numChunks; i++) {
       const start = i * chunkSize;
       const end = Math.min(start + chunkSize - 1, totalSize - 1);
       chunks.push({ index: i, start, end, downloaded: false });
     }
-    
+
     state = {
       url,
       totalSize,
@@ -461,13 +481,13 @@ async function downloadWithResume(
       chunks,
       startedAt: Date.now(),
     };
-    
+
     // Clear any existing chunks
     await modelCache.deleteModel(url);
   }
 
   // Download remaining chunks
-  const pendingChunks = state.chunks.filter(c => !c.downloaded);
+  const pendingChunks = state.chunks.filter((c) => !c.downloaded);
   let downloadedSize = state.downloadedSize;
   const startTime = Date.now();
   let lastProgressTime = startTime;
@@ -476,7 +496,7 @@ async function downloadWithResume(
   // Progress tracking
   const reportProgress = () => {
     if (!onProgress) return;
-    
+
     const now = Date.now();
     const elapsed = (now - lastProgressTime) / 1000;
     const bytesDownloaded = downloadedSize - lastDownloadedSize;
@@ -490,7 +510,7 @@ async function downloadWithResume(
       percent: (downloadedSize / totalSize) * 100,
       speed,
       eta,
-      currentChunk: state!.chunks.filter(c => c.downloaded).length,
+      currentChunk: state!.chunks.filter((c) => c.downloaded).length,
       totalChunks: state!.chunks.length,
     });
 
@@ -506,25 +526,30 @@ async function downloadWithResume(
     // Start new downloads up to parallelConnections limit
     while (downloadQueue.length > 0 && inProgress.size < parallelConnections) {
       const chunk = downloadQueue.shift()!;
-      
+
       const downloadPromise = (async () => {
         try {
-          const data = await downloadChunk(url, chunk.start, chunk.end, timeout);
+          const data = await downloadChunk(
+            url,
+            chunk.start,
+            chunk.end,
+            timeout,
+          );
           await modelCache.saveChunk(url, chunk.index, data);
-          
+
           chunk.downloaded = true;
           downloadedSize += data.byteLength;
-          
+
           // Update state periodically
           state!.downloadedSize = downloadedSize;
           await modelCache.saveDownloadState(state!);
-          
+
           reportProgress();
         } finally {
           inProgress.delete(chunk.index);
         }
       })();
-      
+
       inProgress.set(chunk.index, downloadPromise);
     }
 
@@ -538,7 +563,7 @@ async function downloadWithResume(
   const chunks = await modelCache.getChunks(url);
   const result = new Uint8Array(totalSize);
   let offset = 0;
-  
+
   for (const chunk of chunks) {
     result.set(new Uint8Array(chunk), offset);
     offset += chunk.byteLength;
@@ -564,19 +589,19 @@ async function downloadWithResume(
 async function downloadSimple(
   url: string,
   timeout: number,
-  onProgress?: (progress: DownloadProgress) => void
+  onProgress?: (progress: DownloadProgress) => void,
 ): Promise<ArrayBuffer> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
     const response = await fetch(url, { signal: controller.signal });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const contentLength = response.headers.get('Content-Length');
+    const contentLength = response.headers.get("Content-Length");
     const total = contentLength ? parseInt(contentLength, 10) : 0;
 
     if (!response.body || !onProgress || total === 0) {
@@ -589,6 +614,7 @@ async function downloadSimple(
     let loaded = 0;
     const startTime = Date.now();
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -635,7 +661,7 @@ interface PreloadTask {
   promise: Promise<ArrayBuffer>;
   resolve: (data: ArrayBuffer) => void;
   reject: (error: Error) => void;
-  status: 'pending' | 'loading' | 'complete' | 'error';
+  status: "pending" | "loading" | "complete" | "error";
 }
 
 /**
@@ -660,7 +686,7 @@ class PreloadManager {
     // Create task
     let resolve!: (data: ArrayBuffer) => void;
     let reject!: (error: Error) => void;
-    
+
     const promise = new Promise<ArrayBuffer>((res, rej) => {
       resolve = res;
       reject = rej;
@@ -673,17 +699,17 @@ class PreloadManager {
       promise,
       resolve,
       reject,
-      status: 'pending',
+      status: "pending",
     };
 
     this.tasks.set(url, task);
-    
+
     // Insert into queue based on priority
-    const insertIndex = this.queue.findIndex(u => {
+    const insertIndex = this.queue.findIndex((u) => {
       const t = this.tasks.get(u);
       return t && t.priority < task.priority;
     });
-    
+
     if (insertIndex === -1) {
       this.queue.push(url);
     } else {
@@ -705,10 +731,10 @@ class PreloadManager {
       if (!url) break;
 
       const task = this.tasks.get(url);
-      if (!task || task.status !== 'pending') continue;
+      if (!task || task.status !== "pending") continue;
 
       this.activeCount++;
-      task.status = 'loading';
+      task.status = "loading";
 
       this.downloadTask(task).finally(() => {
         this.activeCount--;
@@ -723,10 +749,10 @@ class PreloadManager {
   private async downloadTask(task: PreloadTask): Promise<void> {
     try {
       const data = await loadModelData(task.url, task.options);
-      task.status = 'complete';
+      task.status = "complete";
       task.resolve(data);
     } catch (error) {
-      task.status = 'error';
+      task.status = "error";
       task.reject(error instanceof Error ? error : new Error(String(error)));
     }
   }
@@ -736,15 +762,17 @@ class PreloadManager {
    */
   isPreloaded(url: string): boolean {
     const task = this.tasks.get(url);
-    return task?.status === 'complete';
+    return task?.status === "complete";
   }
 
   /**
    * Get preload status
    */
-  getStatus(url: string): 'pending' | 'loading' | 'complete' | 'error' | 'not_found' {
+  getStatus(
+    url: string,
+  ): "pending" | "loading" | "complete" | "error" | "not_found" {
     const task = this.tasks.get(url);
-    return task?.status ?? 'not_found';
+    return task?.status ?? "not_found";
   }
 
   /**
@@ -753,11 +781,11 @@ class PreloadManager {
   async get(url: string): Promise<ArrayBuffer | null> {
     const task = this.tasks.get(url);
     if (!task) return null;
-    
-    if (task.status === 'complete' || task.status === 'loading') {
+
+    if (task.status === "complete" || task.status === "loading") {
       return task.promise;
     }
-    
+
     return null;
   }
 
@@ -766,10 +794,10 @@ class PreloadManager {
    */
   cancel(url: string): void {
     const task = this.tasks.get(url);
-    if (task && task.status === 'pending') {
+    if (task && task.status === "pending") {
       this.tasks.delete(url);
-      this.queue = this.queue.filter(u => u !== url);
-      task.reject(new Error('Preload cancelled'));
+      this.queue = this.queue.filter((u) => u !== url);
+      task.reject(new Error("Preload cancelled"));
     }
   }
 
@@ -778,8 +806,8 @@ class PreloadManager {
    */
   clear(): void {
     for (const [, task] of this.tasks) {
-      if (task.status === 'pending') {
-        task.reject(new Error('Preload cleared'));
+      if (task.status === "pending") {
+        task.reject(new Error("Preload cleared"));
       }
     }
     this.tasks.clear();
@@ -799,13 +827,9 @@ const preloadManager = new PreloadManager();
  */
 export async function loadModelData(
   url: string,
-  options: ModelLoaderOptions = {}
+  options: ModelLoaderOptions = {},
 ): Promise<ArrayBuffer> {
-  const {
-    cache = true,
-    forceDownload = false,
-    resumable = true,
-  } = options;
+  const { cache = true, forceDownload = false, resumable = true } = options;
 
   // Check cache first
   if (cache && !forceDownload) {
@@ -825,11 +849,15 @@ export async function loadModelData(
 
   // Download with resume support
   let data: ArrayBuffer;
-  
+
   if (resumable) {
     data = await downloadWithResume(url, options);
   } else {
-    data = await downloadSimple(url, options.timeout ?? 30000, options.onProgress);
+    data = await downloadSimple(
+      url,
+      options.timeout ?? 30000,
+      options.onProgress,
+    );
   }
 
   // Cache the result
@@ -853,7 +881,10 @@ export async function loadModelData(
 /**
  * Preload a model in the background
  */
-export function preloadModel(url: string, options: PreloadOptions = {}): Promise<ArrayBuffer> {
+export function preloadModel(
+  url: string,
+  options: PreloadOptions = {},
+): Promise<ArrayBuffer> {
   return preloadManager.preload(url, options);
 }
 
@@ -862,10 +893,12 @@ export function preloadModel(url: string, options: PreloadOptions = {}): Promise
  */
 export function preloadModels(
   urls: Array<{ url: string; priority?: number }>,
-  options: Omit<PreloadOptions, 'priority'> = {}
+  options: Omit<PreloadOptions, "priority"> = {},
 ): Promise<ArrayBuffer[]> {
   return Promise.all(
-    urls.map(({ url, priority }) => preloadManager.preload(url, { ...options, priority }))
+    urls.map(({ url, priority }) =>
+      preloadManager.preload(url, { ...options, priority }),
+    ),
   );
 }
 
@@ -901,14 +934,19 @@ export async function clearModelCache(): Promise<void> {
 /**
  * Get model cache statistics
  */
-export async function getModelCacheStats(): Promise<{ models: number; totalSize: number }> {
+export async function getModelCacheStats(): Promise<{
+  models: number;
+  totalSize: number;
+}> {
   return modelCache.getStats();
 }
 
 /**
  * Get preload status
  */
-export function getPreloadStatus(url: string): 'pending' | 'loading' | 'complete' | 'error' | 'not_found' {
+export function getPreloadStatus(
+  url: string,
+): "pending" | "loading" | "complete" | "error" | "not_found" {
   return preloadManager.getStatus(url);
 }
 
@@ -922,6 +960,8 @@ export function cancelPreload(url: string): void {
 /**
  * Get preloaded model (or wait for preload to complete)
  */
-export async function getPreloadedModel(url: string): Promise<ArrayBuffer | null> {
+export async function getPreloadedModel(
+  url: string,
+): Promise<ArrayBuffer | null> {
   return preloadManager.get(url);
 }

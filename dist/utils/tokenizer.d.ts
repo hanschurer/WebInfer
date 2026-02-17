@@ -4,12 +4,12 @@
  * Full-featured tokenizer supporting HuggingFace tokenizer.json format.
  * Supports BPE, WordPiece, and Unigram tokenization.
  */
-import { TokenizerConfig, TokenizedOutput } from '../core/types.js';
-export type TokenizerModel = 'BPE' | 'WordPiece' | 'Unigram' | 'basic';
+import { TokenizerConfig, TokenizedOutput } from "../core/types.js";
+export type TokenizerModel = "BPE" | "WordPiece" | "Unigram" | "basic";
 export interface TokenizerOptions {
     addSpecialTokens?: boolean;
     maxLength?: number;
-    padding?: 'max_length' | 'longest' | 'do_not_pad';
+    padding?: "max_length" | "longest" | "do_not_pad";
     truncation?: boolean;
     returnAttentionMask?: boolean;
     returnTokenTypeIds?: boolean;

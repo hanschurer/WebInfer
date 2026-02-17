@@ -4,9 +4,9 @@
  * Autoregressive text generation with streaming support.
  * Supports GPT-2, LLaMA, Mistral, and other causal LM models.
  */
-import { BasePipeline } from './base.js';
-import { WebInferTensor, softmax } from '../core/tensor.js';
-import { runInference } from '../core/runtime.js';
+import { BasePipeline } from "./base.js";
+import { WebInferTensor, softmax } from "../core/tensor.js";
+import { runInference } from "../core/runtime.js";
 // ============================================================================
 // Text Generation Pipeline
 // ============================================================================
@@ -32,8 +32,8 @@ export class TextGenerationPipeline extends BasePipeline {
     eosTokenId = 50256; // GPT-2 default
     constructor(config) {
         super(config ?? {
-            task: 'text-generation',
-            model: 'default',
+            task: "text-generation",
+            model: "default",
         });
     }
     /**
@@ -49,16 +49,18 @@ export class TextGenerationPipeline extends BasePipeline {
      */
     async preprocess(input) {
         // For text generation, preprocessing is handled in generateNextToken
-        const text = Array.isArray(input) ? input[0] ?? '' : input;
+        const text = Array.isArray(input) ? (input[0] ?? "") : input;
         if (!this.tokenizer) {
             // Return dummy tensor if no tokenizer
-            return [new WebInferTensor(new Float32Array([0]), [1], 'float32')];
+            return [new WebInferTensor(new Float32Array([0]), [1], "float32")];
         }
         const encoded = this.tokenizer.encode(text, {
             addSpecialTokens: false,
-            padding: 'do_not_pad',
+            padding: "do_not_pad",
         });
-        return [new WebInferTensor(BigInt64Array.from(encoded.inputIds.map(id => BigInt(id))), [1, encoded.inputIds.length], 'int64')];
+        return [
+            new WebInferTensor(BigInt64Array.from(encoded.inputIds.map((id) => BigInt(id))), [1, encoded.inputIds.length], "int64"),
+        ];
     }
     /**
      * Postprocess - not used for text generation (handled in generateSingle)
@@ -66,7 +68,7 @@ export class TextGenerationPipeline extends BasePipeline {
     async postprocess(_outputs, _options) {
         // For text generation, postprocessing is handled in generateSingle
         return {
-            generatedText: '',
+            generatedText: "",
             tokenIds: [],
             numTokens: 0,
             processingTime: 0,
@@ -78,7 +80,7 @@ export class TextGenerationPipeline extends BasePipeline {
     async run(prompt, options) {
         await this.initialize();
         const prompts = Array.isArray(prompt) ? prompt : [prompt];
-        const results = await Promise.all(prompts.map(p => this.generateSingle(p, options ?? {})));
+        const results = await Promise.all(prompts.map((p) => this.generateSingle(p, options ?? {})));
         return Array.isArray(prompt) ? results : results[0];
     }
     /**
@@ -87,18 +89,18 @@ export class TextGenerationPipeline extends BasePipeline {
     async *stream(prompt, options = {}) {
         const startTime = performance.now();
         if (!this.tokenizer) {
-            throw new Error('Tokenizer not set. Call setTokenizer() first.');
+            throw new Error("Tokenizer not set. Call setTokenizer() first.");
         }
         const { maxNewTokens = 50, maxLength = 512, temperature = 1.0, topK = 0, topP = 1.0, repetitionPenalty = 1.0, stopSequences = [], doSample = true, } = options;
         // Encode prompt
         const encoded = this.tokenizer.encode(prompt, {
             addSpecialTokens: false,
-            padding: 'do_not_pad',
+            padding: "do_not_pad",
             truncation: false,
         });
-        let inputIds = [...encoded.inputIds];
+        const inputIds = [...encoded.inputIds];
         const generatedIds = [];
-        let generatedText = '';
+        let generatedText = "";
         // Generation loop
         for (let i = 0; i < maxNewTokens; i++) {
             // Check max length
@@ -109,7 +111,7 @@ export class TextGenerationPipeline extends BasePipeline {
             // Check for EOS
             if (nextTokenId === this.eosTokenId) {
                 yield {
-                    token: '',
+                    token: "",
                     tokenId: nextTokenId,
                     generatedText,
                     done: true,
@@ -153,16 +155,16 @@ export class TextGenerationPipeline extends BasePipeline {
     async generateSingle(prompt, options) {
         const startTime = performance.now();
         if (!this.tokenizer) {
-            throw new Error('Tokenizer not set. Call setTokenizer() first.');
+            throw new Error("Tokenizer not set. Call setTokenizer() first.");
         }
         const { maxNewTokens = 50, maxLength = 512, temperature = 1.0, topK = 0, topP = 1.0, repetitionPenalty = 1.0, stopSequences = [], doSample = true, returnFullText = false, } = options;
         // Encode prompt
         const encoded = this.tokenizer.encode(prompt, {
             addSpecialTokens: false,
-            padding: 'do_not_pad',
+            padding: "do_not_pad",
             truncation: false,
         });
-        let inputIds = [...encoded.inputIds];
+        const inputIds = [...encoded.inputIds];
         const generatedIds = [];
         // Generation loop
         for (let i = 0; i < maxNewTokens; i++) {
@@ -210,16 +212,19 @@ export class TextGenerationPipeline extends BasePipeline {
      */
     async generateNextToken(inputIds, temperature, topK, topP, repetitionPenalty, doSample) {
         if (!this.model) {
-            throw new Error('Model not loaded');
+            throw new Error("Model not loaded");
         }
         // Prepare input tensor
-        const inputTensor = new WebInferTensor(BigInt64Array.from(inputIds.map(id => BigInt(id))), [1, inputIds.length], 'int64');
+        const inputTensor = new WebInferTensor(BigInt64Array.from(inputIds.map((id) => BigInt(id))), [1, inputIds.length], "int64");
         // Create attention mask
-        const attentionMask = new WebInferTensor(BigInt64Array.from(inputIds.map(() => BigInt(1))), [1, inputIds.length], 'int64');
+        const attentionMask = new WebInferTensor(BigInt64Array.from(inputIds.map(() => BigInt(1))), [1, inputIds.length], "int64");
         // Run inference
-        const outputs = await runInference(this.model, [inputTensor, attentionMask]);
+        const outputs = await runInference(this.model, [
+            inputTensor,
+            attentionMask,
+        ]);
         if (!outputs || outputs.length === 0) {
-            throw new Error('Model returned no outputs');
+            throw new Error("Model returned no outputs");
         }
         // Get logits for last token
         const logits = outputs[0];
@@ -236,9 +241,8 @@ export class TextGenerationPipeline extends BasePipeline {
             for (const prevId of inputIds) {
                 if (prevId < vocabSize) {
                     const score = lastPositionLogits[prevId] ?? 0;
-                    lastPositionLogits[prevId] = score > 0
-                        ? score / repetitionPenalty
-                        : score * repetitionPenalty;
+                    lastPositionLogits[prevId] =
+                        score > 0 ? score / repetitionPenalty : score * repetitionPenalty;
                 }
             }
         }
@@ -249,7 +253,7 @@ export class TextGenerationPipeline extends BasePipeline {
             }
         }
         // Convert to probabilities
-        const logitsTensor = new WebInferTensor(lastPositionLogits, [vocabSize], 'float32');
+        const logitsTensor = new WebInferTensor(lastPositionLogits, [vocabSize], "float32");
         const probs = softmax(logitsTensor).toFloat32Array();
         // Sample or greedy
         if (doSample) {

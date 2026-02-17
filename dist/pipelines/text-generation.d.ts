@@ -4,10 +4,10 @@
  * Autoregressive text generation with streaming support.
  * Supports GPT-2, LLaMA, Mistral, and other causal LM models.
  */
-import { BasePipeline, PipelineResult } from './base.js';
-import { Tokenizer } from '../utils/tokenizer.js';
-import { WebInferTensor } from '../core/tensor.js';
-import { PipelineConfig, PipelineOptions } from '../core/types.js';
+import { BasePipeline, PipelineResult } from "./base.js";
+import { Tokenizer } from "../utils/tokenizer.js";
+import { WebInferTensor } from "../core/tensor.js";
+import { PipelineConfig, PipelineOptions } from "../core/types.js";
 /**
  * Text generation options
  */

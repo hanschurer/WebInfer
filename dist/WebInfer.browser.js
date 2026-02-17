@@ -15,54 +15,666 @@ var __publicField = (obj, key, value) => {
   return value;
 };
 
-// dist/core/types.js
-var WebInferError, ErrorCodes;
-var init_types = __esm({
-  "dist/core/types.js"() {
+// dist/utils/model-loader.js
+var model_loader_exports = {};
+__export(model_loader_exports, {
+  cancelPreload: () => cancelPreload,
+  clearModelCache: () => clearModelCache,
+  deleteCachedModel: () => deleteCachedModel,
+  getCachedModel: () => getCachedModel,
+  getModelCacheStats: () => getModelCacheStats,
+  getPreloadStatus: () => getPreloadStatus,
+  getPreloadedModel: () => getPreloadedModel,
+  isModelCached: () => isModelCached,
+  loadModelData: () => loadModelData,
+  preloadModel: () => preloadModel,
+  preloadModels: () => preloadModels
+});
+async function supportsRangeRequests(url) {
+  try {
+    const response = await fetch(url, { method: "HEAD" });
+    const acceptRanges = response.headers.get("Accept-Ranges");
+    const contentLength = response.headers.get("Content-Length");
+    const etag = response.headers.get("ETag") ?? void 0;
+    return {
+      supports: acceptRanges === "bytes",
+      size: contentLength ? parseInt(contentLength, 10) : 0,
+      etag
+    };
+  } catch {
+    return { supports: false, size: 0 };
+  }
+}
+async function downloadChunk(url, start, end, timeout) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      headers: { Range: `bytes=${start}-${end}` },
+      signal: controller.signal
+    });
+    if (response.status !== 206 && response.status !== 200) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return await response.arrayBuffer();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+async function downloadWithResume(url, options) {
+  const {
+    chunkSize = 5 * 1024 * 1024,
+    // 5MB
+    parallelConnections = 4,
+    timeout = 3e4,
+    onProgress
+  } = options;
+  const { supports: supportsRange, size: totalSize, etag } = await supportsRangeRequests(url);
+  if (!supportsRange || totalSize < chunkSize * 2) {
+    return downloadSimple(url, timeout, onProgress);
+  }
+  let state = await modelCache.getDownloadState(url);
+  if (!state || etag && state.totalSize !== totalSize) {
+    const numChunks = Math.ceil(totalSize / chunkSize);
+    const chunks2 = [];
+    for (let i = 0; i < numChunks; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize - 1, totalSize - 1);
+      chunks2.push({ index: i, start, end, downloaded: false });
+    }
+    state = {
+      url,
+      totalSize,
+      downloadedSize: 0,
+      chunks: chunks2,
+      startedAt: Date.now()
+    };
+    await modelCache.deleteModel(url);
+  }
+  const pendingChunks = state.chunks.filter((c) => !c.downloaded);
+  let downloadedSize = state.downloadedSize;
+  const startTime = Date.now();
+  let lastProgressTime = startTime;
+  let lastDownloadedSize = downloadedSize;
+  const reportProgress = () => {
+    if (!onProgress)
+      return;
+    const now = Date.now();
+    const elapsed = (now - lastProgressTime) / 1e3;
+    const bytesDownloaded = downloadedSize - lastDownloadedSize;
+    const speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
+    const remaining = totalSize - downloadedSize;
+    const eta = speed > 0 ? remaining / speed * 1e3 : 0;
+    onProgress({
+      loaded: downloadedSize,
+      total: totalSize,
+      percent: downloadedSize / totalSize * 100,
+      speed,
+      eta,
+      currentChunk: state.chunks.filter((c) => c.downloaded).length,
+      totalChunks: state.chunks.length
+    });
+    lastProgressTime = now;
+    lastDownloadedSize = downloadedSize;
+  };
+  const downloadQueue = [...pendingChunks];
+  const inProgress = /* @__PURE__ */ new Map();
+  while (downloadQueue.length > 0 || inProgress.size > 0) {
+    while (downloadQueue.length > 0 && inProgress.size < parallelConnections) {
+      const chunk = downloadQueue.shift();
+      const downloadPromise = (async () => {
+        try {
+          const data = await downloadChunk(url, chunk.start, chunk.end, timeout);
+          await modelCache.saveChunk(url, chunk.index, data);
+          chunk.downloaded = true;
+          downloadedSize += data.byteLength;
+          state.downloadedSize = downloadedSize;
+          await modelCache.saveDownloadState(state);
+          reportProgress();
+        } finally {
+          inProgress.delete(chunk.index);
+        }
+      })();
+      inProgress.set(chunk.index, downloadPromise);
+    }
+    if (inProgress.size > 0) {
+      await Promise.race(inProgress.values());
+    }
+  }
+  const chunks = await modelCache.getChunks(url);
+  const result = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(new Uint8Array(chunk), offset);
+    offset += chunk.byteLength;
+  }
+  await modelCache.saveMeta({
+    url,
+    size: totalSize,
+    etag,
+    cachedAt: Date.now(),
+    chunks: chunks.length,
+    complete: true
+  });
+  await modelCache.deleteDownloadState(url);
+  return result.buffer;
+}
+async function downloadSimple(url, timeout, onProgress) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    const contentLength = response.headers.get("Content-Length");
+    const total = contentLength ? parseInt(contentLength, 10) : 0;
+    if (!response.body || !onProgress || total === 0) {
+      return await response.arrayBuffer();
+    }
+    const reader = response.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    const startTime = Date.now();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done)
+        break;
+      chunks.push(value);
+      loaded += value.length;
+      const elapsed = (Date.now() - startTime) / 1e3;
+      const speed = elapsed > 0 ? loaded / elapsed : 0;
+      const remaining = total - loaded;
+      const eta = speed > 0 ? remaining / speed * 1e3 : 0;
+      onProgress({
+        loaded,
+        total,
+        percent: loaded / total * 100,
+        speed,
+        eta
+      });
+    }
+    const result = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result.buffer;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+async function loadModelData(url, options = {}) {
+  const { cache = true, forceDownload = false, resumable = true } = options;
+  if (cache && !forceDownload) {
+    const cached = await modelCache.getModel(url);
+    if (cached) {
+      console.log(`\u2713 Model loaded from cache: ${url}`);
+      options.onProgress?.({
+        loaded: cached.byteLength,
+        total: cached.byteLength,
+        percent: 100,
+        speed: 0,
+        eta: 0
+      });
+      return cached;
+    }
+  }
+  let data;
+  if (resumable) {
+    data = await downloadWithResume(url, options);
+  } else {
+    data = await downloadSimple(url, options.timeout ?? 3e4, options.onProgress);
+  }
+  if (cache) {
+    if (!resumable) {
+      await modelCache.saveChunk(url, 0, data);
+      await modelCache.saveMeta({
+        url,
+        size: data.byteLength,
+        cachedAt: Date.now(),
+        chunks: 1,
+        complete: true
+      });
+    }
+  }
+  return data;
+}
+function preloadModel(url, options = {}) {
+  return preloadManager.preload(url, options);
+}
+function preloadModels(urls, options = {}) {
+  return Promise.all(urls.map(({ url, priority }) => preloadManager.preload(url, { ...options, priority })));
+}
+async function isModelCached(url) {
+  const meta = await modelCache.getMeta(url);
+  return meta?.complete ?? false;
+}
+async function getCachedModel(url) {
+  return modelCache.getModel(url);
+}
+async function deleteCachedModel(url) {
+  return modelCache.deleteModel(url);
+}
+async function clearModelCache() {
+  return modelCache.clear();
+}
+async function getModelCacheStats() {
+  return modelCache.getStats();
+}
+function getPreloadStatus(url) {
+  return preloadManager.getStatus(url);
+}
+function cancelPreload(url) {
+  preloadManager.cancel(url);
+}
+async function getPreloadedModel(url) {
+  return preloadManager.get(url);
+}
+var DB_NAME, DB_VERSION, STORE_META, STORE_CHUNKS, STORE_STATE, ModelCache2, modelCache, PreloadManager, preloadManager;
+var init_model_loader = __esm({
+  "dist/utils/model-loader.js"() {
     "use strict";
-    WebInferError = class extends Error {
-      constructor(message, code, details) {
-        super(message);
-        __publicField(this, "code");
-        __publicField(this, "details");
-        this.code = code;
-        this.details = details;
-        this.name = "WebInferError";
+    DB_NAME = "WebInfer-model-cache";
+    DB_VERSION = 1;
+    STORE_META = "meta";
+    STORE_CHUNKS = "chunks";
+    STORE_STATE = "download-state";
+    ModelCache2 = class {
+      constructor() {
+        __publicField(this, "db", null);
+        __publicField(this, "dbPromise", null);
+      }
+      /**
+       * Open the database
+       */
+      async openDB() {
+        if (this.db)
+          return this.db;
+        if (this.dbPromise)
+          return this.dbPromise;
+        this.dbPromise = new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(STORE_META)) {
+              db.createObjectStore(STORE_META, { keyPath: "url" });
+            }
+            if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
+              const chunkStore = db.createObjectStore(STORE_CHUNKS, {
+                keyPath: ["url", "index"]
+              });
+              chunkStore.createIndex("url", "url", { unique: false });
+            }
+            if (!db.objectStoreNames.contains(STORE_STATE)) {
+              db.createObjectStore(STORE_STATE, { keyPath: "url" });
+            }
+          };
+          request.onsuccess = () => {
+            this.db = request.result;
+            resolve(this.db);
+          };
+          request.onerror = () => reject(request.error);
+        });
+        return this.dbPromise;
+      }
+      /**
+       * Get cached model metadata
+       */
+      async getMeta(url) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_META, "readonly");
+          const store = tx.objectStore(STORE_META);
+          const request = store.get(url);
+          request.onsuccess = () => resolve(request.result ?? null);
+          request.onerror = () => reject(request.error);
+        });
+      }
+      /**
+       * Save model metadata
+       */
+      async saveMeta(meta) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_META, "readwrite");
+          const store = tx.objectStore(STORE_META);
+          store.put(meta);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+      /**
+       * Save a chunk
+       */
+      async saveChunk(url, index, data) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_CHUNKS, "readwrite");
+          const store = tx.objectStore(STORE_CHUNKS);
+          store.put({ url, index, data });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+      /**
+       * Get all chunks for a URL
+       */
+      async getChunks(url) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_CHUNKS, "readonly");
+          const store = tx.objectStore(STORE_CHUNKS);
+          const index = store.index("url");
+          const request = index.getAll(url);
+          request.onsuccess = () => {
+            const results = request.result;
+            results.sort((a, b) => a.index - b.index);
+            resolve(results.map((r) => r.data));
+          };
+          request.onerror = () => reject(request.error);
+        });
+      }
+      /**
+       * Get complete model data (merged chunks)
+       */
+      async getModel(url) {
+        const meta = await this.getMeta(url);
+        if (!meta || !meta.complete)
+          return null;
+        const chunks = await this.getChunks(url);
+        if (chunks.length === 0)
+          return null;
+        const totalSize = chunks.reduce((sum2, chunk) => sum2 + chunk.byteLength, 0);
+        const result = new Uint8Array(totalSize);
+        let offset = 0;
+        for (const chunk of chunks) {
+          result.set(new Uint8Array(chunk), offset);
+          offset += chunk.byteLength;
+        }
+        return result.buffer;
+      }
+      /**
+       * Save download state (for resume)
+       */
+      async saveDownloadState(state) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_STATE, "readwrite");
+          const store = tx.objectStore(STORE_STATE);
+          store.put(state);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+      /**
+       * Get download state
+       */
+      async getDownloadState(url) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_STATE, "readonly");
+          const store = tx.objectStore(STORE_STATE);
+          const request = store.get(url);
+          request.onsuccess = () => resolve(request.result ?? null);
+          request.onerror = () => reject(request.error);
+        });
+      }
+      /**
+       * Delete download state
+       */
+      async deleteDownloadState(url) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_STATE, "readwrite");
+          const store = tx.objectStore(STORE_STATE);
+          store.delete(url);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+      /**
+       * Delete cached model
+       */
+      async deleteModel(url) {
+        const db = await this.openDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_META, "readwrite");
+          const store = tx.objectStore(STORE_META);
+          store.delete(url);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        const chunks = await this.getChunks(url);
+        if (chunks.length > 0) {
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_CHUNKS, "readwrite");
+            const store = tx.objectStore(STORE_CHUNKS);
+            const index = store.index("url");
+            const request = index.openCursor(IDBKeyRange.only(url));
+            request.onsuccess = (event) => {
+              const cursor = event.target.result;
+              if (cursor) {
+                cursor.delete();
+                cursor.continue();
+              }
+            };
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        }
+        await this.deleteDownloadState(url);
+      }
+      /**
+       * Clear all cached models
+       */
+      async clear() {
+        const db = await this.openDB();
+        const stores = [STORE_META, STORE_CHUNKS, STORE_STATE];
+        for (const storeName of stores) {
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, "readwrite");
+            const store = tx.objectStore(storeName);
+            store.clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        }
+      }
+      /**
+       * Get cache statistics
+       */
+      async getStats() {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_META, "readonly");
+          const store = tx.objectStore(STORE_META);
+          const request = store.getAll();
+          request.onsuccess = () => {
+            const metas = request.result;
+            resolve({
+              models: metas.filter((m) => m.complete).length,
+              totalSize: metas.reduce((sum2, m) => sum2 + (m.complete ? m.size : 0), 0)
+            });
+          };
+          request.onerror = () => reject(request.error);
+        });
       }
     };
-    ErrorCodes = {
-      // Runtime errors
-      RUNTIME_NOT_AVAILABLE: "RUNTIME_NOT_AVAILABLE",
-      RUNTIME_INIT_FAILED: "RUNTIME_INIT_FAILED",
-      RUNTIME_NOT_INITIALIZED: "RUNTIME_NOT_INITIALIZED",
-      // Model errors
-      MODEL_NOT_FOUND: "MODEL_NOT_FOUND",
-      MODEL_LOAD_FAILED: "MODEL_LOAD_FAILED",
-      MODEL_INVALID_FORMAT: "MODEL_INVALID_FORMAT",
-      MODEL_NOT_LOADED: "MODEL_NOT_LOADED",
-      // Inference errors
-      INFERENCE_FAILED: "INFERENCE_FAILED",
-      INFERENCE_TIMEOUT: "INFERENCE_TIMEOUT",
-      INFERENCE_CANCELLED: "INFERENCE_CANCELLED",
-      // Memory errors
-      OUT_OF_MEMORY: "OUT_OF_MEMORY",
-      MEMORY_LEAK_DETECTED: "MEMORY_LEAK_DETECTED",
-      // Tensor errors
-      TENSOR_SHAPE_MISMATCH: "TENSOR_SHAPE_MISMATCH",
-      TENSOR_DTYPE_MISMATCH: "TENSOR_DTYPE_MISMATCH",
-      TENSOR_DISPOSED: "TENSOR_DISPOSED",
-      // Pipeline errors
-      PIPELINE_NOT_SUPPORTED: "PIPELINE_NOT_SUPPORTED",
-      PIPELINE_INPUT_INVALID: "PIPELINE_INPUT_INVALID",
-      // General errors
-      INVALID_ARGUMENT: "INVALID_ARGUMENT",
-      NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
-      UNKNOWN_ERROR: "UNKNOWN_ERROR"
+    modelCache = new ModelCache2();
+    PreloadManager = class {
+      constructor() {
+        __publicField(this, "tasks", /* @__PURE__ */ new Map());
+        __publicField(this, "queue", []);
+        __publicField(this, "maxConcurrent", 2);
+        __publicField(this, "activeCount", 0);
+      }
+      /**
+       * Preload a model in the background
+       */
+      preload(url, options = {}) {
+        const existing = this.tasks.get(url);
+        if (existing) {
+          return existing.promise;
+        }
+        let resolve;
+        let reject;
+        const promise = new Promise((res, rej) => {
+          resolve = res;
+          reject = rej;
+        });
+        const task = {
+          url,
+          priority: options.priority ?? 0,
+          options,
+          promise,
+          resolve,
+          reject,
+          status: "pending"
+        };
+        this.tasks.set(url, task);
+        const insertIndex = this.queue.findIndex((u) => {
+          const t = this.tasks.get(u);
+          return t && t.priority < task.priority;
+        });
+        if (insertIndex === -1) {
+          this.queue.push(url);
+        } else {
+          this.queue.splice(insertIndex, 0, url);
+        }
+        this.processQueue();
+        return promise;
+      }
+      /**
+       * Process the preload queue
+       */
+      async processQueue() {
+        while (this.queue.length > 0 && this.activeCount < this.maxConcurrent) {
+          const url = this.queue.shift();
+          if (!url)
+            break;
+          const task = this.tasks.get(url);
+          if (!task || task.status !== "pending")
+            continue;
+          this.activeCount++;
+          task.status = "loading";
+          this.downloadTask(task).finally(() => {
+            this.activeCount--;
+            this.processQueue();
+          });
+        }
+      }
+      /**
+       * Download a preload task
+       */
+      async downloadTask(task) {
+        try {
+          const data = await loadModelData(task.url, task.options);
+          task.status = "complete";
+          task.resolve(data);
+        } catch (error) {
+          task.status = "error";
+          task.reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+      /**
+       * Check if a model is preloaded
+       */
+      isPreloaded(url) {
+        const task = this.tasks.get(url);
+        return task?.status === "complete";
+      }
+      /**
+       * Get preload status
+       */
+      getStatus(url) {
+        const task = this.tasks.get(url);
+        return task?.status ?? "not_found";
+      }
+      /**
+       * Get preloaded model data
+       */
+      async get(url) {
+        const task = this.tasks.get(url);
+        if (!task)
+          return null;
+        if (task.status === "complete" || task.status === "loading") {
+          return task.promise;
+        }
+        return null;
+      }
+      /**
+       * Cancel preload
+       */
+      cancel(url) {
+        const task = this.tasks.get(url);
+        if (task && task.status === "pending") {
+          this.tasks.delete(url);
+          this.queue = this.queue.filter((u) => u !== url);
+          task.reject(new Error("Preload cancelled"));
+        }
+      }
+      /**
+       * Clear all preloads
+       */
+      clear() {
+        for (const [, task] of this.tasks) {
+          if (task.status === "pending") {
+            task.reject(new Error("Preload cleared"));
+          }
+        }
+        this.tasks.clear();
+        this.queue = [];
+      }
     };
+    preloadManager = new PreloadManager();
   }
 });
 
+// dist/core/types.js
+var WebInferError = class extends Error {
+  constructor(message, code, details) {
+    super(message);
+    __publicField(this, "code");
+    __publicField(this, "details");
+    this.code = code;
+    this.details = details;
+    this.name = "WebInferError";
+  }
+};
+var ErrorCodes = {
+  // Runtime errors
+  RUNTIME_NOT_AVAILABLE: "RUNTIME_NOT_AVAILABLE",
+  RUNTIME_INIT_FAILED: "RUNTIME_INIT_FAILED",
+  RUNTIME_NOT_INITIALIZED: "RUNTIME_NOT_INITIALIZED",
+  // Model errors
+  MODEL_NOT_FOUND: "MODEL_NOT_FOUND",
+  MODEL_LOAD_FAILED: "MODEL_LOAD_FAILED",
+  MODEL_INVALID_FORMAT: "MODEL_INVALID_FORMAT",
+  MODEL_NOT_LOADED: "MODEL_NOT_LOADED",
+  // Inference errors
+  INFERENCE_FAILED: "INFERENCE_FAILED",
+  INFERENCE_TIMEOUT: "INFERENCE_TIMEOUT",
+  INFERENCE_CANCELLED: "INFERENCE_CANCELLED",
+  // Memory errors
+  OUT_OF_MEMORY: "OUT_OF_MEMORY",
+  MEMORY_LEAK_DETECTED: "MEMORY_LEAK_DETECTED",
+  // Tensor errors
+  TENSOR_SHAPE_MISMATCH: "TENSOR_SHAPE_MISMATCH",
+  TENSOR_DTYPE_MISMATCH: "TENSOR_DTYPE_MISMATCH",
+  TENSOR_DISPOSED: "TENSOR_DISPOSED",
+  // Pipeline errors
+  PIPELINE_NOT_SUPPORTED: "PIPELINE_NOT_SUPPORTED",
+  PIPELINE_INPUT_INVALID: "PIPELINE_INPUT_INVALID",
+  // General errors
+  INVALID_ARGUMENT: "INVALID_ARGUMENT",
+  NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
+  UNKNOWN_ERROR: "UNKNOWN_ERROR"
+};
+
 // dist/core/tensor.js
+var tensorIdCounter = 0;
 function generateTensorId() {
   return `tensor_${++tensorIdCounter}_${Date.now().toString(36)}`;
 }
@@ -98,6 +710,181 @@ function validateShape(shape) {
     }
   }
 }
+var WebInferTensor = class _WebInferTensor {
+  constructor(data, shape, dtype = "float32") {
+    __publicField(this, "id");
+    __publicField(this, "dtype");
+    __publicField(this, "shape");
+    __publicField(this, "size");
+    __publicField(this, "_data");
+    __publicField(this, "_isDisposed", false);
+    validateShape(shape);
+    this.id = generateTensorId();
+    this.dtype = dtype;
+    this.shape = Object.freeze([...shape]);
+    this.size = calculateSize(this.shape);
+    const expectedSize = this.size;
+    if (data.length !== expectedSize) {
+      throw new WebInferError(`Data length (${data.length}) does not match shape ${JSON.stringify(shape)} (expected ${expectedSize})`, ErrorCodes.TENSOR_SHAPE_MISMATCH, { dataLength: data.length, expectedSize, shape });
+    }
+    if (data instanceof Array) {
+      const TypedArrayCtor = getTypedArrayConstructor(dtype);
+      this._data = new TypedArrayCtor(data.length);
+      if (dtype === "int64") {
+        const bigIntData = this._data;
+        for (let i = 0; i < data.length; i++) {
+          bigIntData[i] = BigInt(Math.round(data[i] ?? 0));
+        }
+      } else {
+        for (let i = 0; i < data.length; i++) {
+          this._data[i] = data[i] ?? 0;
+        }
+      }
+    } else {
+      this._data = data;
+    }
+  }
+  get data() {
+    this.checkDisposed();
+    return this._data;
+  }
+  get isDisposed() {
+    return this._isDisposed;
+  }
+  /**
+   * Check if tensor has been disposed
+   */
+  checkDisposed() {
+    if (this._isDisposed) {
+      throw new WebInferError("Cannot access disposed tensor", ErrorCodes.TENSOR_DISPOSED, { tensorId: this.id });
+    }
+  }
+  /**
+   * Convert to Float32Array
+   */
+  toFloat32Array() {
+    this.checkDisposed();
+    if (this._data instanceof Float32Array) {
+      return this._data;
+    }
+    const result = new Float32Array(this.size);
+    for (let i = 0; i < this.size; i++) {
+      result[i] = Number(this._data[i] ?? 0);
+    }
+    return result;
+  }
+  /**
+   * Convert to regular array
+   */
+  toArray() {
+    this.checkDisposed();
+    if (this.dtype === "int64") {
+      const bigIntData = this._data;
+      const result = [];
+      for (let i = 0; i < bigIntData.length; i++) {
+        result.push(Number(bigIntData[i]));
+      }
+      return result;
+    }
+    return Array.from(this._data);
+  }
+  /**
+   * Clone the tensor
+   */
+  clone() {
+    this.checkDisposed();
+    const TypedArrayCtor = this._data.constructor;
+    const clonedData = new TypedArrayCtor(this._data);
+    return new _WebInferTensor(clonedData, this.shape, this.dtype);
+  }
+  /**
+   * Dispose the tensor and free memory
+   */
+  dispose() {
+    if (!this._isDisposed) {
+      this._isDisposed = true;
+      Object.assign(this, { _data: null });
+    }
+  }
+  /**
+   * Get value at specific indices
+   */
+  get(...indices) {
+    this.checkDisposed();
+    if (indices.length !== this.shape.length) {
+      throw new WebInferError(`Expected ${this.shape.length} indices, got ${indices.length}`, ErrorCodes.INVALID_ARGUMENT, { expectedIndices: this.shape.length, gotIndices: indices.length });
+    }
+    let flatIndex = 0;
+    let stride = 1;
+    for (let i = this.shape.length - 1; i >= 0; i--) {
+      const idx = indices[i] ?? 0;
+      const dim = this.shape[i] ?? 1;
+      if (idx < 0 || idx >= dim) {
+        throw new WebInferError(`Index ${idx} out of bounds for dimension ${i} with size ${dim}`, ErrorCodes.INVALID_ARGUMENT, { index: idx, dimension: i, size: dim });
+      }
+      flatIndex += idx * stride;
+      stride *= dim;
+    }
+    return Number(this._data[flatIndex] ?? 0);
+  }
+  /**
+   * Set value at specific indices
+   */
+  set(value, ...indices) {
+    this.checkDisposed();
+    if (indices.length !== this.shape.length) {
+      throw new WebInferError(`Expected ${this.shape.length} indices, got ${indices.length}`, ErrorCodes.INVALID_ARGUMENT, { expectedIndices: this.shape.length, gotIndices: indices.length });
+    }
+    let flatIndex = 0;
+    let stride = 1;
+    for (let i = this.shape.length - 1; i >= 0; i--) {
+      const idx = indices[i] ?? 0;
+      const dim = this.shape[i] ?? 1;
+      if (idx < 0 || idx >= dim) {
+        throw new WebInferError(`Index ${idx} out of bounds for dimension ${i} with size ${dim}`, ErrorCodes.INVALID_ARGUMENT, { index: idx, dimension: i, size: dim });
+      }
+      flatIndex += idx * stride;
+      stride *= dim;
+    }
+    this._data[flatIndex] = value;
+  }
+  /**
+   * Reshape the tensor (returns new tensor)
+   */
+  reshape(newShape) {
+    this.checkDisposed();
+    const newSize = calculateSize(newShape);
+    if (newSize !== this.size) {
+      throw new WebInferError(`Cannot reshape tensor of size ${this.size} to shape ${JSON.stringify(newShape)} (size ${newSize})`, ErrorCodes.TENSOR_SHAPE_MISMATCH, { currentSize: this.size, newSize, newShape });
+    }
+    const TypedArrayCtor = this._data.constructor;
+    const clonedData = new TypedArrayCtor(this._data);
+    return new _WebInferTensor(clonedData, newShape, this.dtype);
+  }
+  /**
+   * Transpose the tensor (2D only for now)
+   */
+  transpose() {
+    this.checkDisposed();
+    if (this.shape.length !== 2) {
+      throw new WebInferError("Transpose is currently only supported for 2D tensors", ErrorCodes.NOT_IMPLEMENTED, { shape: this.shape });
+    }
+    const [rows, cols] = this.shape;
+    const result = new Float32Array(this.size);
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        result[j * rows + i] = Number(this._data[i * cols + j] ?? 0);
+      }
+    }
+    return new _WebInferTensor(result, [cols, rows], this.dtype);
+  }
+  /**
+   * Create string representation
+   */
+  toString() {
+    return `Tensor(shape=[${this.shape.join(", ")}], dtype=${this.dtype})`;
+  }
+};
 function tensor(data, shape, dtype = "float32") {
   if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
     const rows = data.length;
@@ -487,811 +1274,8 @@ function concat(tensors, axis = 0) {
   }
   throw new WebInferError("Concatenation currently only supports 1D tensors", ErrorCodes.NOT_IMPLEMENTED);
 }
-var tensorIdCounter, WebInferTensor;
-var init_tensor = __esm({
-  "dist/core/tensor.js"() {
-    "use strict";
-    init_types();
-    tensorIdCounter = 0;
-    WebInferTensor = class _WebInferTensor {
-      constructor(data, shape, dtype = "float32") {
-        __publicField(this, "id");
-        __publicField(this, "dtype");
-        __publicField(this, "shape");
-        __publicField(this, "size");
-        __publicField(this, "_data");
-        __publicField(this, "_isDisposed", false);
-        validateShape(shape);
-        this.id = generateTensorId();
-        this.dtype = dtype;
-        this.shape = Object.freeze([...shape]);
-        this.size = calculateSize(this.shape);
-        const expectedSize = this.size;
-        if (data.length !== expectedSize) {
-          throw new WebInferError(`Data length (${data.length}) does not match shape ${JSON.stringify(shape)} (expected ${expectedSize})`, ErrorCodes.TENSOR_SHAPE_MISMATCH, { dataLength: data.length, expectedSize, shape });
-        }
-        if (data instanceof Array) {
-          const TypedArrayCtor = getTypedArrayConstructor(dtype);
-          this._data = new TypedArrayCtor(data.length);
-          if (dtype === "int64") {
-            const bigIntData = this._data;
-            for (let i = 0; i < data.length; i++) {
-              bigIntData[i] = BigInt(Math.round(data[i] ?? 0));
-            }
-          } else {
-            for (let i = 0; i < data.length; i++) {
-              this._data[i] = data[i] ?? 0;
-            }
-          }
-        } else {
-          this._data = data;
-        }
-      }
-      get data() {
-        this.checkDisposed();
-        return this._data;
-      }
-      get isDisposed() {
-        return this._isDisposed;
-      }
-      /**
-       * Check if tensor has been disposed
-       */
-      checkDisposed() {
-        if (this._isDisposed) {
-          throw new WebInferError("Cannot access disposed tensor", ErrorCodes.TENSOR_DISPOSED, { tensorId: this.id });
-        }
-      }
-      /**
-       * Convert to Float32Array
-       */
-      toFloat32Array() {
-        this.checkDisposed();
-        if (this._data instanceof Float32Array) {
-          return this._data;
-        }
-        const result = new Float32Array(this.size);
-        for (let i = 0; i < this.size; i++) {
-          result[i] = Number(this._data[i] ?? 0);
-        }
-        return result;
-      }
-      /**
-       * Convert to regular array
-       */
-      toArray() {
-        this.checkDisposed();
-        if (this.dtype === "int64") {
-          const bigIntData = this._data;
-          const result = [];
-          for (let i = 0; i < bigIntData.length; i++) {
-            result.push(Number(bigIntData[i]));
-          }
-          return result;
-        }
-        return Array.from(this._data);
-      }
-      /**
-       * Clone the tensor
-       */
-      clone() {
-        this.checkDisposed();
-        const TypedArrayCtor = this._data.constructor;
-        const clonedData = new TypedArrayCtor(this._data);
-        return new _WebInferTensor(clonedData, this.shape, this.dtype);
-      }
-      /**
-       * Dispose the tensor and free memory
-       */
-      dispose() {
-        if (!this._isDisposed) {
-          this._isDisposed = true;
-          Object.assign(this, { _data: null });
-        }
-      }
-      /**
-       * Get value at specific indices
-       */
-      get(...indices) {
-        this.checkDisposed();
-        if (indices.length !== this.shape.length) {
-          throw new WebInferError(`Expected ${this.shape.length} indices, got ${indices.length}`, ErrorCodes.INVALID_ARGUMENT, { expectedIndices: this.shape.length, gotIndices: indices.length });
-        }
-        let flatIndex = 0;
-        let stride = 1;
-        for (let i = this.shape.length - 1; i >= 0; i--) {
-          const idx = indices[i] ?? 0;
-          const dim = this.shape[i] ?? 1;
-          if (idx < 0 || idx >= dim) {
-            throw new WebInferError(`Index ${idx} out of bounds for dimension ${i} with size ${dim}`, ErrorCodes.INVALID_ARGUMENT, { index: idx, dimension: i, size: dim });
-          }
-          flatIndex += idx * stride;
-          stride *= dim;
-        }
-        return Number(this._data[flatIndex] ?? 0);
-      }
-      /**
-       * Set value at specific indices
-       */
-      set(value, ...indices) {
-        this.checkDisposed();
-        if (indices.length !== this.shape.length) {
-          throw new WebInferError(`Expected ${this.shape.length} indices, got ${indices.length}`, ErrorCodes.INVALID_ARGUMENT, { expectedIndices: this.shape.length, gotIndices: indices.length });
-        }
-        let flatIndex = 0;
-        let stride = 1;
-        for (let i = this.shape.length - 1; i >= 0; i--) {
-          const idx = indices[i] ?? 0;
-          const dim = this.shape[i] ?? 1;
-          if (idx < 0 || idx >= dim) {
-            throw new WebInferError(`Index ${idx} out of bounds for dimension ${i} with size ${dim}`, ErrorCodes.INVALID_ARGUMENT, { index: idx, dimension: i, size: dim });
-          }
-          flatIndex += idx * stride;
-          stride *= dim;
-        }
-        this._data[flatIndex] = value;
-      }
-      /**
-       * Reshape the tensor (returns new tensor)
-       */
-      reshape(newShape) {
-        this.checkDisposed();
-        const newSize = calculateSize(newShape);
-        if (newSize !== this.size) {
-          throw new WebInferError(`Cannot reshape tensor of size ${this.size} to shape ${JSON.stringify(newShape)} (size ${newSize})`, ErrorCodes.TENSOR_SHAPE_MISMATCH, { currentSize: this.size, newSize, newShape });
-        }
-        const TypedArrayCtor = this._data.constructor;
-        const clonedData = new TypedArrayCtor(this._data);
-        return new _WebInferTensor(clonedData, newShape, this.dtype);
-      }
-      /**
-       * Transpose the tensor (2D only for now)
-       */
-      transpose() {
-        this.checkDisposed();
-        if (this.shape.length !== 2) {
-          throw new WebInferError("Transpose is currently only supported for 2D tensors", ErrorCodes.NOT_IMPLEMENTED, { shape: this.shape });
-        }
-        const [rows, cols] = this.shape;
-        const result = new Float32Array(this.size);
-        for (let i = 0; i < rows; i++) {
-          for (let j = 0; j < cols; j++) {
-            result[j * rows + i] = Number(this._data[i * cols + j] ?? 0);
-          }
-        }
-        return new _WebInferTensor(result, [cols, rows], this.dtype);
-      }
-      /**
-       * Create string representation
-       */
-      toString() {
-        return `Tensor(shape=[${this.shape.join(", ")}], dtype=${this.dtype})`;
-      }
-    };
-  }
-});
-
-// dist/utils/model-loader.js
-var model_loader_exports = {};
-__export(model_loader_exports, {
-  cancelPreload: () => cancelPreload,
-  clearModelCache: () => clearModelCache,
-  deleteCachedModel: () => deleteCachedModel,
-  getCachedModel: () => getCachedModel,
-  getModelCacheStats: () => getModelCacheStats,
-  getPreloadStatus: () => getPreloadStatus,
-  getPreloadedModel: () => getPreloadedModel,
-  isModelCached: () => isModelCached,
-  loadModelData: () => loadModelData,
-  preloadModel: () => preloadModel,
-  preloadModels: () => preloadModels
-});
-async function supportsRangeRequests(url) {
-  try {
-    const response = await fetch(url, { method: "HEAD" });
-    const acceptRanges = response.headers.get("Accept-Ranges");
-    const contentLength = response.headers.get("Content-Length");
-    const etag = response.headers.get("ETag") ?? void 0;
-    return {
-      supports: acceptRanges === "bytes",
-      size: contentLength ? parseInt(contentLength, 10) : 0,
-      etag
-    };
-  } catch {
-    return { supports: false, size: 0 };
-  }
-}
-async function downloadChunk(url, start, end, timeout) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, {
-      headers: { Range: `bytes=${start}-${end}` },
-      signal: controller.signal
-    });
-    if (response.status !== 206 && response.status !== 200) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    return await response.arrayBuffer();
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-async function downloadWithResume(url, options) {
-  const {
-    chunkSize = 5 * 1024 * 1024,
-    // 5MB
-    parallelConnections = 4,
-    timeout = 3e4,
-    onProgress
-  } = options;
-  const { supports: supportsRange, size: totalSize, etag } = await supportsRangeRequests(url);
-  if (!supportsRange || totalSize < chunkSize * 2) {
-    return downloadSimple(url, timeout, onProgress);
-  }
-  let state = await modelCache.getDownloadState(url);
-  if (!state || etag && state.totalSize !== totalSize) {
-    const numChunks = Math.ceil(totalSize / chunkSize);
-    const chunks2 = [];
-    for (let i = 0; i < numChunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize - 1, totalSize - 1);
-      chunks2.push({ index: i, start, end, downloaded: false });
-    }
-    state = {
-      url,
-      totalSize,
-      downloadedSize: 0,
-      chunks: chunks2,
-      startedAt: Date.now()
-    };
-    await modelCache.deleteModel(url);
-  }
-  const pendingChunks = state.chunks.filter((c) => !c.downloaded);
-  let downloadedSize = state.downloadedSize;
-  const startTime = Date.now();
-  let lastProgressTime = startTime;
-  let lastDownloadedSize = downloadedSize;
-  const reportProgress = () => {
-    if (!onProgress)
-      return;
-    const now = Date.now();
-    const elapsed = (now - lastProgressTime) / 1e3;
-    const bytesDownloaded = downloadedSize - lastDownloadedSize;
-    const speed = elapsed > 0 ? bytesDownloaded / elapsed : 0;
-    const remaining = totalSize - downloadedSize;
-    const eta = speed > 0 ? remaining / speed * 1e3 : 0;
-    onProgress({
-      loaded: downloadedSize,
-      total: totalSize,
-      percent: downloadedSize / totalSize * 100,
-      speed,
-      eta,
-      currentChunk: state.chunks.filter((c) => c.downloaded).length,
-      totalChunks: state.chunks.length
-    });
-    lastProgressTime = now;
-    lastDownloadedSize = downloadedSize;
-  };
-  const downloadQueue = [...pendingChunks];
-  const inProgress = /* @__PURE__ */ new Map();
-  while (downloadQueue.length > 0 || inProgress.size > 0) {
-    while (downloadQueue.length > 0 && inProgress.size < parallelConnections) {
-      const chunk = downloadQueue.shift();
-      const downloadPromise = (async () => {
-        try {
-          const data = await downloadChunk(url, chunk.start, chunk.end, timeout);
-          await modelCache.saveChunk(url, chunk.index, data);
-          chunk.downloaded = true;
-          downloadedSize += data.byteLength;
-          state.downloadedSize = downloadedSize;
-          await modelCache.saveDownloadState(state);
-          reportProgress();
-        } finally {
-          inProgress.delete(chunk.index);
-        }
-      })();
-      inProgress.set(chunk.index, downloadPromise);
-    }
-    if (inProgress.size > 0) {
-      await Promise.race(inProgress.values());
-    }
-  }
-  const chunks = await modelCache.getChunks(url);
-  const result = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(new Uint8Array(chunk), offset);
-    offset += chunk.byteLength;
-  }
-  await modelCache.saveMeta({
-    url,
-    size: totalSize,
-    etag,
-    cachedAt: Date.now(),
-    chunks: chunks.length,
-    complete: true
-  });
-  await modelCache.deleteDownloadState(url);
-  return result.buffer;
-}
-async function downloadSimple(url, timeout, onProgress) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    const contentLength = response.headers.get("Content-Length");
-    const total = contentLength ? parseInt(contentLength, 10) : 0;
-    if (!response.body || !onProgress || total === 0) {
-      return await response.arrayBuffer();
-    }
-    const reader = response.body.getReader();
-    const chunks = [];
-    let loaded = 0;
-    const startTime = Date.now();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done)
-        break;
-      chunks.push(value);
-      loaded += value.length;
-      const elapsed = (Date.now() - startTime) / 1e3;
-      const speed = elapsed > 0 ? loaded / elapsed : 0;
-      const remaining = total - loaded;
-      const eta = speed > 0 ? remaining / speed * 1e3 : 0;
-      onProgress({
-        loaded,
-        total,
-        percent: loaded / total * 100,
-        speed,
-        eta
-      });
-    }
-    const result = new Uint8Array(loaded);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return result.buffer;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-async function loadModelData(url, options = {}) {
-  const { cache = true, forceDownload = false, resumable = true } = options;
-  if (cache && !forceDownload) {
-    const cached = await modelCache.getModel(url);
-    if (cached) {
-      console.log(`\u2713 Model loaded from cache: ${url}`);
-      options.onProgress?.({
-        loaded: cached.byteLength,
-        total: cached.byteLength,
-        percent: 100,
-        speed: 0,
-        eta: 0
-      });
-      return cached;
-    }
-  }
-  let data;
-  if (resumable) {
-    data = await downloadWithResume(url, options);
-  } else {
-    data = await downloadSimple(url, options.timeout ?? 3e4, options.onProgress);
-  }
-  if (cache) {
-    if (!resumable) {
-      await modelCache.saveChunk(url, 0, data);
-      await modelCache.saveMeta({
-        url,
-        size: data.byteLength,
-        cachedAt: Date.now(),
-        chunks: 1,
-        complete: true
-      });
-    }
-  }
-  return data;
-}
-function preloadModel(url, options = {}) {
-  return preloadManager.preload(url, options);
-}
-function preloadModels(urls, options = {}) {
-  return Promise.all(urls.map(({ url, priority }) => preloadManager.preload(url, { ...options, priority })));
-}
-async function isModelCached(url) {
-  const meta = await modelCache.getMeta(url);
-  return meta?.complete ?? false;
-}
-async function getCachedModel(url) {
-  return modelCache.getModel(url);
-}
-async function deleteCachedModel(url) {
-  return modelCache.deleteModel(url);
-}
-async function clearModelCache() {
-  return modelCache.clear();
-}
-async function getModelCacheStats() {
-  return modelCache.getStats();
-}
-function getPreloadStatus(url) {
-  return preloadManager.getStatus(url);
-}
-function cancelPreload(url) {
-  preloadManager.cancel(url);
-}
-async function getPreloadedModel(url) {
-  return preloadManager.get(url);
-}
-var DB_NAME, DB_VERSION, STORE_META, STORE_CHUNKS, STORE_STATE, ModelCache2, modelCache, PreloadManager, preloadManager;
-var init_model_loader = __esm({
-  "dist/utils/model-loader.js"() {
-    "use strict";
-    DB_NAME = "WebInfer-model-cache";
-    DB_VERSION = 1;
-    STORE_META = "meta";
-    STORE_CHUNKS = "chunks";
-    STORE_STATE = "download-state";
-    ModelCache2 = class {
-      constructor() {
-        __publicField(this, "db", null);
-        __publicField(this, "dbPromise", null);
-      }
-      /**
-       * Open the database
-       */
-      async openDB() {
-        if (this.db)
-          return this.db;
-        if (this.dbPromise)
-          return this.dbPromise;
-        this.dbPromise = new Promise((resolve, reject) => {
-          const request = indexedDB.open(DB_NAME, DB_VERSION);
-          request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains(STORE_META)) {
-              db.createObjectStore(STORE_META, { keyPath: "url" });
-            }
-            if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
-              const chunkStore = db.createObjectStore(STORE_CHUNKS, { keyPath: ["url", "index"] });
-              chunkStore.createIndex("url", "url", { unique: false });
-            }
-            if (!db.objectStoreNames.contains(STORE_STATE)) {
-              db.createObjectStore(STORE_STATE, { keyPath: "url" });
-            }
-          };
-          request.onsuccess = () => {
-            this.db = request.result;
-            resolve(this.db);
-          };
-          request.onerror = () => reject(request.error);
-        });
-        return this.dbPromise;
-      }
-      /**
-       * Get cached model metadata
-       */
-      async getMeta(url) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_META, "readonly");
-          const store = tx.objectStore(STORE_META);
-          const request = store.get(url);
-          request.onsuccess = () => resolve(request.result ?? null);
-          request.onerror = () => reject(request.error);
-        });
-      }
-      /**
-       * Save model metadata
-       */
-      async saveMeta(meta) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_META, "readwrite");
-          const store = tx.objectStore(STORE_META);
-          store.put(meta);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      }
-      /**
-       * Save a chunk
-       */
-      async saveChunk(url, index, data) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_CHUNKS, "readwrite");
-          const store = tx.objectStore(STORE_CHUNKS);
-          store.put({ url, index, data });
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      }
-      /**
-       * Get all chunks for a URL
-       */
-      async getChunks(url) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_CHUNKS, "readonly");
-          const store = tx.objectStore(STORE_CHUNKS);
-          const index = store.index("url");
-          const request = index.getAll(url);
-          request.onsuccess = () => {
-            const results = request.result;
-            results.sort((a, b) => a.index - b.index);
-            resolve(results.map((r) => r.data));
-          };
-          request.onerror = () => reject(request.error);
-        });
-      }
-      /**
-       * Get complete model data (merged chunks)
-       */
-      async getModel(url) {
-        const meta = await this.getMeta(url);
-        if (!meta || !meta.complete)
-          return null;
-        const chunks = await this.getChunks(url);
-        if (chunks.length === 0)
-          return null;
-        const totalSize = chunks.reduce((sum2, chunk) => sum2 + chunk.byteLength, 0);
-        const result = new Uint8Array(totalSize);
-        let offset = 0;
-        for (const chunk of chunks) {
-          result.set(new Uint8Array(chunk), offset);
-          offset += chunk.byteLength;
-        }
-        return result.buffer;
-      }
-      /**
-       * Save download state (for resume)
-       */
-      async saveDownloadState(state) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_STATE, "readwrite");
-          const store = tx.objectStore(STORE_STATE);
-          store.put(state);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      }
-      /**
-       * Get download state
-       */
-      async getDownloadState(url) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_STATE, "readonly");
-          const store = tx.objectStore(STORE_STATE);
-          const request = store.get(url);
-          request.onsuccess = () => resolve(request.result ?? null);
-          request.onerror = () => reject(request.error);
-        });
-      }
-      /**
-       * Delete download state
-       */
-      async deleteDownloadState(url) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_STATE, "readwrite");
-          const store = tx.objectStore(STORE_STATE);
-          store.delete(url);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      }
-      /**
-       * Delete cached model
-       */
-      async deleteModel(url) {
-        const db = await this.openDB();
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_META, "readwrite");
-          const store = tx.objectStore(STORE_META);
-          store.delete(url);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-        const chunks = await this.getChunks(url);
-        if (chunks.length > 0) {
-          await new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_CHUNKS, "readwrite");
-            const store = tx.objectStore(STORE_CHUNKS);
-            const index = store.index("url");
-            const request = index.openCursor(IDBKeyRange.only(url));
-            request.onsuccess = (event) => {
-              const cursor = event.target.result;
-              if (cursor) {
-                cursor.delete();
-                cursor.continue();
-              }
-            };
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-          });
-        }
-        await this.deleteDownloadState(url);
-      }
-      /**
-       * Clear all cached models
-       */
-      async clear() {
-        const db = await this.openDB();
-        const stores = [STORE_META, STORE_CHUNKS, STORE_STATE];
-        for (const storeName of stores) {
-          await new Promise((resolve, reject) => {
-            const tx = db.transaction(storeName, "readwrite");
-            const store = tx.objectStore(storeName);
-            store.clear();
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-          });
-        }
-      }
-      /**
-       * Get cache statistics
-       */
-      async getStats() {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_META, "readonly");
-          const store = tx.objectStore(STORE_META);
-          const request = store.getAll();
-          request.onsuccess = () => {
-            const metas = request.result;
-            resolve({
-              models: metas.filter((m) => m.complete).length,
-              totalSize: metas.reduce((sum2, m) => sum2 + (m.complete ? m.size : 0), 0)
-            });
-          };
-          request.onerror = () => reject(request.error);
-        });
-      }
-    };
-    modelCache = new ModelCache2();
-    PreloadManager = class {
-      constructor() {
-        __publicField(this, "tasks", /* @__PURE__ */ new Map());
-        __publicField(this, "queue", []);
-        __publicField(this, "maxConcurrent", 2);
-        __publicField(this, "activeCount", 0);
-      }
-      /**
-       * Preload a model in the background
-       */
-      preload(url, options = {}) {
-        const existing = this.tasks.get(url);
-        if (existing) {
-          return existing.promise;
-        }
-        let resolve;
-        let reject;
-        const promise = new Promise((res, rej) => {
-          resolve = res;
-          reject = rej;
-        });
-        const task = {
-          url,
-          priority: options.priority ?? 0,
-          options,
-          promise,
-          resolve,
-          reject,
-          status: "pending"
-        };
-        this.tasks.set(url, task);
-        const insertIndex = this.queue.findIndex((u) => {
-          const t = this.tasks.get(u);
-          return t && t.priority < task.priority;
-        });
-        if (insertIndex === -1) {
-          this.queue.push(url);
-        } else {
-          this.queue.splice(insertIndex, 0, url);
-        }
-        this.processQueue();
-        return promise;
-      }
-      /**
-       * Process the preload queue
-       */
-      async processQueue() {
-        while (this.queue.length > 0 && this.activeCount < this.maxConcurrent) {
-          const url = this.queue.shift();
-          if (!url)
-            break;
-          const task = this.tasks.get(url);
-          if (!task || task.status !== "pending")
-            continue;
-          this.activeCount++;
-          task.status = "loading";
-          this.downloadTask(task).finally(() => {
-            this.activeCount--;
-            this.processQueue();
-          });
-        }
-      }
-      /**
-       * Download a preload task
-       */
-      async downloadTask(task) {
-        try {
-          const data = await loadModelData(task.url, task.options);
-          task.status = "complete";
-          task.resolve(data);
-        } catch (error) {
-          task.status = "error";
-          task.reject(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
-      /**
-       * Check if a model is preloaded
-       */
-      isPreloaded(url) {
-        const task = this.tasks.get(url);
-        return task?.status === "complete";
-      }
-      /**
-       * Get preload status
-       */
-      getStatus(url) {
-        const task = this.tasks.get(url);
-        return task?.status ?? "not_found";
-      }
-      /**
-       * Get preloaded model data
-       */
-      async get(url) {
-        const task = this.tasks.get(url);
-        if (!task)
-          return null;
-        if (task.status === "complete" || task.status === "loading") {
-          return task.promise;
-        }
-        return null;
-      }
-      /**
-       * Cancel preload
-       */
-      cancel(url) {
-        const task = this.tasks.get(url);
-        if (task && task.status === "pending") {
-          this.tasks.delete(url);
-          this.queue = this.queue.filter((u) => u !== url);
-          task.reject(new Error("Preload cancelled"));
-        }
-      }
-      /**
-       * Clear all preloads
-       */
-      clear() {
-        for (const [, task] of this.tasks) {
-          if (task.status === "pending") {
-            task.reject(new Error("Preload cleared"));
-          }
-        }
-        this.tasks.clear();
-        this.queue = [];
-      }
-    };
-    preloadManager = new PreloadManager();
-  }
-});
-
-// dist/index.js
-init_types();
-init_tensor();
 
 // dist/core/scheduler.js
-init_types();
 var Task = class {
   constructor(id, modelId, priority, executor) {
     __publicField(this, "id");
@@ -2248,7 +2232,6 @@ function gc() {
 }
 
 // dist/core/runtime.js
-init_types();
 var runtimeFactories = /* @__PURE__ */ new Map();
 var runtimeInstances = /* @__PURE__ */ new Map();
 var RUNTIME_PRIORITY = ["webgpu", "webnn", "wasm"];
@@ -2508,8 +2491,6 @@ async function getAvailableRuntimes() {
 }
 
 // dist/backends/webgpu.js
-init_types();
-init_tensor();
 var GPUBufferUsage = {
   STORAGE: 128,
   COPY_SRC: 4,
@@ -2779,8 +2760,6 @@ function createWebGPURuntime() {
 }
 
 // dist/backends/webnn.js
-init_types();
-init_tensor();
 var WebNNRuntime = class {
   constructor() {
     __publicField(this, "name", "webnn");
@@ -2950,8 +2929,6 @@ function createWebNNRuntime() {
 }
 
 // dist/backends/wasm.js
-init_types();
-init_tensor();
 var WASMRuntime = class {
   constructor() {
     __publicField(this, "name", "wasm");
@@ -3294,9 +3271,7 @@ function createWASMRuntime() {
 }
 
 // dist/backends/onnx.js
-init_types();
 import * as ort from "onnxruntime-web";
-init_tensor();
 var sessionStore = /* @__PURE__ */ new Map();
 var ONNXRuntime = class {
   constructor() {
@@ -3969,11 +3944,7 @@ var IMAGENET_LABELS = [
   "ostrich"
 ];
 
-// dist/pipelines/text-classification.js
-init_tensor();
-
 // dist/utils/tokenizer.js
-init_types();
 var Tokenizer = class _Tokenizer {
   constructor() {
     __publicField(this, "vocab", /* @__PURE__ */ new Map());
@@ -4422,12 +4393,21 @@ var Tokenizer = class _Tokenizer {
     }
     if (padding === "max_length" && inputIds.length < maxLength) {
       const padLength = maxLength - inputIds.length;
-      inputIds = [...inputIds, ...new Array(padLength).fill(this.padTokenId)];
+      inputIds = [
+        ...inputIds,
+        ...new Array(padLength).fill(this.padTokenId)
+      ];
       if (returnAttentionMask) {
-        attentionMask = [...attentionMask, ...new Array(padLength).fill(0)];
+        attentionMask = [
+          ...attentionMask,
+          ...new Array(padLength).fill(0)
+        ];
       }
       if (tokenTypeIds) {
-        tokenTypeIds = [...tokenTypeIds, ...new Array(padLength).fill(0)];
+        tokenTypeIds = [
+          ...tokenTypeIds,
+          ...new Array(padLength).fill(0)
+        ];
       }
     }
     const result = {
@@ -4446,7 +4426,11 @@ var Tokenizer = class _Tokenizer {
     if (options.padding === "longest") {
       const encodings = texts.map((t) => this.encode(t, { ...options, padding: "do_not_pad" }));
       const maxLen = Math.max(...encodings.map((e) => e.inputIds.length));
-      return texts.map((t) => this.encode(t, { ...options, maxLength: maxLen, padding: "max_length" }));
+      return texts.map((t) => this.encode(t, {
+        ...options,
+        maxLength: maxLen,
+        padding: "max_length"
+      }));
     }
     return texts.map((t) => this.encode(t, options));
   }
@@ -4673,7 +4657,6 @@ registerPipeline("text-classification", (config) => new TextClassificationPipeli
 registerPipeline("sentiment-analysis", (config) => new SentimentAnalysisPipeline(config));
 
 // dist/pipelines/feature-extraction.js
-init_tensor();
 var FeatureExtractionPipeline = class extends BasePipeline {
   constructor(config, embeddingDim = 768) {
     super(config);
@@ -4840,11 +4823,7 @@ function createFeatureExtractionPipeline(config = {}) {
 }
 registerPipeline("feature-extraction", (config) => new FeatureExtractionPipeline(config));
 
-// dist/pipelines/image-classification.js
-init_tensor();
-
 // dist/utils/preprocessor.js
-init_tensor();
 var DEFAULT_IMAGE_OPTIONS = {
   width: 224,
   height: 224,
@@ -5543,7 +5522,6 @@ function createImageClassificationPipeline(config = {}, labels) {
 registerPipeline("image-classification", (config) => new ImageClassificationPipeline(config));
 
 // dist/pipelines/text-generation.js
-init_tensor();
 var TextGenerationPipeline = class extends BasePipeline {
   // GPT-2 default
   constructor(config) {
@@ -5574,7 +5552,9 @@ var TextGenerationPipeline = class extends BasePipeline {
       addSpecialTokens: false,
       padding: "do_not_pad"
     });
-    return [new WebInferTensor(BigInt64Array.from(encoded.inputIds.map((id) => BigInt(id))), [1, encoded.inputIds.length], "int64")];
+    return [
+      new WebInferTensor(BigInt64Array.from(encoded.inputIds.map((id) => BigInt(id))), [1, encoded.inputIds.length], "int64")
+    ];
   }
   /**
    * Postprocess - not used for text generation (handled in generateSingle)
@@ -5610,7 +5590,7 @@ var TextGenerationPipeline = class extends BasePipeline {
       padding: "do_not_pad",
       truncation: false
     });
-    let inputIds = [...encoded.inputIds];
+    const inputIds = [...encoded.inputIds];
     const generatedIds = [];
     let generatedText = "";
     for (let i = 0; i < maxNewTokens; i++) {
@@ -5667,7 +5647,7 @@ var TextGenerationPipeline = class extends BasePipeline {
       padding: "do_not_pad",
       truncation: false
     });
-    let inputIds = [...encoded.inputIds];
+    const inputIds = [...encoded.inputIds];
     const generatedIds = [];
     for (let i = 0; i < maxNewTokens; i++) {
       if (inputIds.length >= maxLength)
@@ -5711,7 +5691,10 @@ var TextGenerationPipeline = class extends BasePipeline {
     }
     const inputTensor = new WebInferTensor(BigInt64Array.from(inputIds.map((id) => BigInt(id))), [1, inputIds.length], "int64");
     const attentionMask = new WebInferTensor(BigInt64Array.from(inputIds.map(() => BigInt(1))), [1, inputIds.length], "int64");
-    const outputs = await runInference(this.model, [inputTensor, attentionMask]);
+    const outputs = await runInference(this.model, [
+      inputTensor,
+      attentionMask
+    ]);
     if (!outputs || outputs.length === 0) {
       throw new Error("Model returned no outputs");
     }
@@ -5795,12 +5778,8 @@ var TextGenerationPipeline = class extends BasePipeline {
   }
 };
 
-// dist/pipelines/token-classification.js
-init_tensor();
-
 // dist/utils/hub.js
 init_model_loader();
-init_types();
 var DEFAULT_ENDPOINT = "https://huggingface.co";
 var DEFAULT_REVISION = "main";
 var ONNX_MODEL_FILES = [
@@ -6264,7 +6243,6 @@ function mergeBioToEntities(toks, text) {
 registerPipeline("token-classification", (config) => new TokenClassificationPipeline(config));
 
 // dist/pipelines/object-detection.js
-init_tensor();
 var COCO_LABELS = [
   "person",
   "bicycle",
@@ -6520,7 +6498,6 @@ var ObjectDetectionPipeline = class extends BasePipeline {
 };
 
 // dist/pipelines/automatic-speech-recognition.js
-init_tensor();
 var AutomaticSpeechRecognitionPipeline = class extends BasePipeline {
   constructor(config) {
     super(config ?? {
@@ -6664,7 +6641,6 @@ var AutomaticSpeechRecognitionPipeline = class extends BasePipeline {
 };
 
 // dist/pipelines/zero-shot-classification.js
-init_tensor();
 var ZeroShotClassificationPipeline = class extends BasePipeline {
   constructor(config) {
     super(config ?? {
@@ -6776,7 +6752,6 @@ var ZeroShotClassificationPipeline = class extends BasePipeline {
 };
 
 // dist/pipelines/question-answering.js
-init_tensor();
 var QuestionAnsweringPipeline = class extends BasePipeline {
   constructor(config) {
     super(config ?? {
@@ -7143,10 +7118,6 @@ async function benchmarkMemory(fn, options = {}) {
   };
 }
 
-// dist/core/index.js
-init_types();
-init_tensor();
-
 // dist/tools/quantization.js
 function calculateQuantParams(data, bits, symmetric, perChannel, channelAxis = 0, shape = []) {
   const qmin = symmetric ? -(1 << bits - 1) : 0;
@@ -7180,7 +7151,12 @@ function calculateQuantParams(data, bits, symmetric, perChannel, channelAxis = 0
       if (scales[c] === 0)
         scales[c] = 1;
     }
-    return { scale: scales, zeroPoint: zeroPoints, min: globalMin, max: globalMax };
+    return {
+      scale: scales,
+      zeroPoint: zeroPoints,
+      min: globalMin,
+      max: globalMax
+    };
   } else {
     let min = Infinity;
     let max = -Infinity;
@@ -7531,32 +7507,37 @@ async function quantizeModel(modelData, options) {
     let quantizedData2;
     let quantizedDtype;
     switch (type) {
-      case "int8":
+      case "int8": {
         const int8Data = quantizeToInt8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel ? weight.data.length / (weight.shape[0] ?? 1) : weight.data.length);
         quantizedData2 = int8Data.buffer.slice(0);
         quantizedDtype = "int8";
         break;
-      case "uint8":
+      }
+      case "uint8": {
         const uint8Data = quantizeToUint8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel ? weight.data.length / (weight.shape[0] ?? 1) : weight.data.length);
         quantizedData2 = uint8Data.buffer.slice(0);
         quantizedDtype = "uint8";
         break;
-      case "int4":
+      }
+      case "int4": {
         const int4Data = quantizeToInt4(weight.data, params.scale, params.zeroPoint);
         quantizedData2 = int4Data.buffer.slice(0);
         quantizedDtype = "int4";
         break;
-      case "float16":
+      }
+      case "float16": {
         const fp16Data = quantizeToFloat16(weight.data);
         quantizedData2 = fp16Data.buffer.slice(0);
         quantizedDtype = "float16";
         break;
+      }
       case "dynamic":
-      default:
+      default: {
         const dynData = quantizeToInt8(weight.data, params.scale, params.zeroPoint, perChannel, perChannel ? weight.data.length / (weight.shape[0] ?? 1) : weight.data.length);
         quantizedData2 = dynData.buffer.slice(0);
         quantizedDtype = "int8";
         break;
+      }
     }
     tensorsQuantized++;
     quantizedParams += weight.data.length;
@@ -7686,7 +7667,7 @@ function pruneTensor(tensor2, options = {}) {
   if (method === "magnitude") {
     const absValues = Array.from(data).map(Math.abs).sort((a, b) => a - b);
     const thresholdIndex = Math.floor(absValues.length * ratio);
-    const computedThreshold = threshold ?? (absValues[thresholdIndex] ?? 0);
+    const computedThreshold = threshold ?? absValues[thresholdIndex] ?? 0;
     for (let i = 0; i < data.length; i++) {
       if (Math.abs(data[i] ?? 0) > computedThreshold) {
         mask[i] = 1;
@@ -9207,16 +9188,32 @@ async function quantize(model, options) {
   let layersSkipped = 0;
   switch (options.method) {
     case "int8":
-      ({ data: quantizedData, layersQuantized, layersSkipped } = quantizeInt8(modelData, options));
+      ({
+        data: quantizedData,
+        layersQuantized,
+        layersSkipped
+      } = quantizeInt8(modelData, options));
       break;
     case "uint8":
-      ({ data: quantizedData, layersQuantized, layersSkipped } = quantizeUint8(modelData, options));
+      ({
+        data: quantizedData,
+        layersQuantized,
+        layersSkipped
+      } = quantizeUint8(modelData, options));
       break;
     case "float16":
-      ({ data: quantizedData, layersQuantized, layersSkipped } = quantizeFloat16(modelData, options));
+      ({
+        data: quantizedData,
+        layersQuantized,
+        layersSkipped
+      } = quantizeFloat16(modelData, options));
       break;
     case "int4":
-      ({ data: quantizedData, layersQuantized, layersSkipped } = quantizeInt4(modelData, options));
+      ({
+        data: quantizedData,
+        layersQuantized,
+        layersSkipped
+      } = quantizeInt4(modelData, options));
       break;
     default:
       quantizedData = modelData;
@@ -9402,9 +9399,10 @@ async function benchmark2(runFn, options = {}) {
 async function exportModel2(model, format) {
   const modelData = model instanceof ArrayBuffer ? model : await getModelData(model);
   switch (format) {
-    case "json":
+    case "json": {
       const array = new Float32Array(modelData);
       return JSON.stringify(Array.from(array));
+    }
     case "binary":
     case "onnx":
     default:

@@ -10,11 +10,11 @@
 // ============================================================================
 // IndexedDB Model Cache
 // ============================================================================
-const DB_NAME = 'WebInfer-model-cache';
+const DB_NAME = "WebInfer-model-cache";
 const DB_VERSION = 1;
-const STORE_META = 'meta';
-const STORE_CHUNKS = 'chunks';
-const STORE_STATE = 'download-state';
+const STORE_META = "meta";
+const STORE_CHUNKS = "chunks";
+const STORE_STATE = "download-state";
 /**
  * IndexedDB-based model cache for large files
  */
@@ -35,16 +35,18 @@ class ModelCache {
                 const db = event.target.result;
                 // Model metadata store
                 if (!db.objectStoreNames.contains(STORE_META)) {
-                    db.createObjectStore(STORE_META, { keyPath: 'url' });
+                    db.createObjectStore(STORE_META, { keyPath: "url" });
                 }
                 // Chunk data store
                 if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
-                    const chunkStore = db.createObjectStore(STORE_CHUNKS, { keyPath: ['url', 'index'] });
-                    chunkStore.createIndex('url', 'url', { unique: false });
+                    const chunkStore = db.createObjectStore(STORE_CHUNKS, {
+                        keyPath: ["url", "index"],
+                    });
+                    chunkStore.createIndex("url", "url", { unique: false });
                 }
                 // Download state store (for resume)
                 if (!db.objectStoreNames.contains(STORE_STATE)) {
-                    db.createObjectStore(STORE_STATE, { keyPath: 'url' });
+                    db.createObjectStore(STORE_STATE, { keyPath: "url" });
                 }
             };
             request.onsuccess = () => {
@@ -61,7 +63,7 @@ class ModelCache {
     async getMeta(url) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_META, 'readonly');
+            const tx = db.transaction(STORE_META, "readonly");
             const store = tx.objectStore(STORE_META);
             const request = store.get(url);
             request.onsuccess = () => resolve(request.result ?? null);
@@ -74,7 +76,7 @@ class ModelCache {
     async saveMeta(meta) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_META, 'readwrite');
+            const tx = db.transaction(STORE_META, "readwrite");
             const store = tx.objectStore(STORE_META);
             store.put(meta);
             tx.oncomplete = () => resolve();
@@ -87,7 +89,7 @@ class ModelCache {
     async saveChunk(url, index, data) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_CHUNKS, 'readwrite');
+            const tx = db.transaction(STORE_CHUNKS, "readwrite");
             const store = tx.objectStore(STORE_CHUNKS);
             store.put({ url, index, data });
             tx.oncomplete = () => resolve();
@@ -100,15 +102,15 @@ class ModelCache {
     async getChunks(url) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_CHUNKS, 'readonly');
+            const tx = db.transaction(STORE_CHUNKS, "readonly");
             const store = tx.objectStore(STORE_CHUNKS);
-            const index = store.index('url');
+            const index = store.index("url");
             const request = index.getAll(url);
             request.onsuccess = () => {
                 const results = request.result;
                 // Sort by index and extract data
                 results.sort((a, b) => a.index - b.index);
-                resolve(results.map(r => r.data));
+                resolve(results.map((r) => r.data));
             };
             request.onerror = () => reject(request.error);
         });
@@ -139,7 +141,7 @@ class ModelCache {
     async saveDownloadState(state) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_STATE, 'readwrite');
+            const tx = db.transaction(STORE_STATE, "readwrite");
             const store = tx.objectStore(STORE_STATE);
             store.put(state);
             tx.oncomplete = () => resolve();
@@ -152,7 +154,7 @@ class ModelCache {
     async getDownloadState(url) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_STATE, 'readonly');
+            const tx = db.transaction(STORE_STATE, "readonly");
             const store = tx.objectStore(STORE_STATE);
             const request = store.get(url);
             request.onsuccess = () => resolve(request.result ?? null);
@@ -165,7 +167,7 @@ class ModelCache {
     async deleteDownloadState(url) {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_STATE, 'readwrite');
+            const tx = db.transaction(STORE_STATE, "readwrite");
             const store = tx.objectStore(STORE_STATE);
             store.delete(url);
             tx.oncomplete = () => resolve();
@@ -179,7 +181,7 @@ class ModelCache {
         const db = await this.openDB();
         // Delete metadata
         await new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_META, 'readwrite');
+            const tx = db.transaction(STORE_META, "readwrite");
             const store = tx.objectStore(STORE_META);
             store.delete(url);
             tx.oncomplete = () => resolve();
@@ -189,12 +191,13 @@ class ModelCache {
         const chunks = await this.getChunks(url);
         if (chunks.length > 0) {
             await new Promise((resolve, reject) => {
-                const tx = db.transaction(STORE_CHUNKS, 'readwrite');
+                const tx = db.transaction(STORE_CHUNKS, "readwrite");
                 const store = tx.objectStore(STORE_CHUNKS);
-                const index = store.index('url');
+                const index = store.index("url");
                 const request = index.openCursor(IDBKeyRange.only(url));
                 request.onsuccess = (event) => {
-                    const cursor = event.target.result;
+                    const cursor = event.target
+                        .result;
                     if (cursor) {
                         cursor.delete();
                         cursor.continue();
@@ -215,7 +218,7 @@ class ModelCache {
         const stores = [STORE_META, STORE_CHUNKS, STORE_STATE];
         for (const storeName of stores) {
             await new Promise((resolve, reject) => {
-                const tx = db.transaction(storeName, 'readwrite');
+                const tx = db.transaction(storeName, "readwrite");
                 const store = tx.objectStore(storeName);
                 store.clear();
                 tx.oncomplete = () => resolve();
@@ -229,13 +232,13 @@ class ModelCache {
     async getStats() {
         const db = await this.openDB();
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_META, 'readonly');
+            const tx = db.transaction(STORE_META, "readonly");
             const store = tx.objectStore(STORE_META);
             const request = store.getAll();
             request.onsuccess = () => {
                 const metas = request.result;
                 resolve({
-                    models: metas.filter(m => m.complete).length,
+                    models: metas.filter((m) => m.complete).length,
                     totalSize: metas.reduce((sum, m) => sum + (m.complete ? m.size : 0), 0),
                 });
             };
@@ -253,12 +256,12 @@ const modelCache = new ModelCache();
  */
 async function supportsRangeRequests(url) {
     try {
-        const response = await fetch(url, { method: 'HEAD' });
-        const acceptRanges = response.headers.get('Accept-Ranges');
-        const contentLength = response.headers.get('Content-Length');
-        const etag = response.headers.get('ETag') ?? undefined;
+        const response = await fetch(url, { method: "HEAD" });
+        const acceptRanges = response.headers.get("Accept-Ranges");
+        const contentLength = response.headers.get("Content-Length");
+        const etag = response.headers.get("ETag") ?? undefined;
         return {
-            supports: acceptRanges === 'bytes',
+            supports: acceptRanges === "bytes",
             size: contentLength ? parseInt(contentLength, 10) : 0,
             etag,
         };
@@ -294,7 +297,7 @@ async function downloadWithResume(url, options) {
     const { chunkSize = 5 * 1024 * 1024, // 5MB
     parallelConnections = 4, timeout = 30000, onProgress, } = options;
     // Check server capabilities
-    const { supports: supportsRange, size: totalSize, etag } = await supportsRangeRequests(url);
+    const { supports: supportsRange, size: totalSize, etag, } = await supportsRangeRequests(url);
     // If no Range support or small file, download normally
     if (!supportsRange || totalSize < chunkSize * 2) {
         return downloadSimple(url, timeout, onProgress);
@@ -321,7 +324,7 @@ async function downloadWithResume(url, options) {
         await modelCache.deleteModel(url);
     }
     // Download remaining chunks
-    const pendingChunks = state.chunks.filter(c => !c.downloaded);
+    const pendingChunks = state.chunks.filter((c) => !c.downloaded);
     let downloadedSize = state.downloadedSize;
     const startTime = Date.now();
     let lastProgressTime = startTime;
@@ -342,7 +345,7 @@ async function downloadWithResume(url, options) {
             percent: (downloadedSize / totalSize) * 100,
             speed,
             eta,
-            currentChunk: state.chunks.filter(c => c.downloaded).length,
+            currentChunk: state.chunks.filter((c) => c.downloaded).length,
             totalChunks: state.chunks.length,
         });
         lastProgressTime = now;
@@ -408,7 +411,7 @@ async function downloadSimple(url, timeout, onProgress) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        const contentLength = response.headers.get('Content-Length');
+        const contentLength = response.headers.get("Content-Length");
         const total = contentLength ? parseInt(contentLength, 10) : 0;
         if (!response.body || !onProgress || total === 0) {
             return await response.arrayBuffer();
@@ -418,6 +421,7 @@ async function downloadSimple(url, timeout, onProgress) {
         const chunks = [];
         let loaded = 0;
         const startTime = Date.now();
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             const { done, value } = await reader.read();
             if (done)
@@ -480,11 +484,11 @@ class PreloadManager {
             promise,
             resolve,
             reject,
-            status: 'pending',
+            status: "pending",
         };
         this.tasks.set(url, task);
         // Insert into queue based on priority
-        const insertIndex = this.queue.findIndex(u => {
+        const insertIndex = this.queue.findIndex((u) => {
             const t = this.tasks.get(u);
             return t && t.priority < task.priority;
         });
@@ -507,10 +511,10 @@ class PreloadManager {
             if (!url)
                 break;
             const task = this.tasks.get(url);
-            if (!task || task.status !== 'pending')
+            if (!task || task.status !== "pending")
                 continue;
             this.activeCount++;
-            task.status = 'loading';
+            task.status = "loading";
             this.downloadTask(task).finally(() => {
                 this.activeCount--;
                 this.processQueue();
@@ -523,11 +527,11 @@ class PreloadManager {
     async downloadTask(task) {
         try {
             const data = await loadModelData(task.url, task.options);
-            task.status = 'complete';
+            task.status = "complete";
             task.resolve(data);
         }
         catch (error) {
-            task.status = 'error';
+            task.status = "error";
             task.reject(error instanceof Error ? error : new Error(String(error)));
         }
     }
@@ -536,14 +540,14 @@ class PreloadManager {
      */
     isPreloaded(url) {
         const task = this.tasks.get(url);
-        return task?.status === 'complete';
+        return task?.status === "complete";
     }
     /**
      * Get preload status
      */
     getStatus(url) {
         const task = this.tasks.get(url);
-        return task?.status ?? 'not_found';
+        return task?.status ?? "not_found";
     }
     /**
      * Get preloaded model data
@@ -552,7 +556,7 @@ class PreloadManager {
         const task = this.tasks.get(url);
         if (!task)
             return null;
-        if (task.status === 'complete' || task.status === 'loading') {
+        if (task.status === "complete" || task.status === "loading") {
             return task.promise;
         }
         return null;
@@ -562,10 +566,10 @@ class PreloadManager {
      */
     cancel(url) {
         const task = this.tasks.get(url);
-        if (task && task.status === 'pending') {
+        if (task && task.status === "pending") {
             this.tasks.delete(url);
-            this.queue = this.queue.filter(u => u !== url);
-            task.reject(new Error('Preload cancelled'));
+            this.queue = this.queue.filter((u) => u !== url);
+            task.reject(new Error("Preload cancelled"));
         }
     }
     /**
@@ -573,8 +577,8 @@ class PreloadManager {
      */
     clear() {
         for (const [, task] of this.tasks) {
-            if (task.status === 'pending') {
-                task.reject(new Error('Preload cleared'));
+            if (task.status === "pending") {
+                task.reject(new Error("Preload cleared"));
             }
         }
         this.tasks.clear();
@@ -590,7 +594,7 @@ const preloadManager = new PreloadManager();
  * Load model data with caching, sharding, and resume support
  */
 export async function loadModelData(url, options = {}) {
-    const { cache = true, forceDownload = false, resumable = true, } = options;
+    const { cache = true, forceDownload = false, resumable = true } = options;
     // Check cache first
     if (cache && !forceDownload) {
         const cached = await modelCache.getModel(url);

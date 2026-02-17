@@ -4,7 +4,7 @@
  * Full-featured tokenizer supporting HuggingFace tokenizer.json format.
  * Supports BPE, WordPiece, and Unigram tokenization.
  */
-import { WebInferError, ErrorCodes, } from '../core/types.js';
+import { WebInferError, ErrorCodes, } from "../core/types.js";
 // ============================================================================
 // Tokenizer Implementation
 // ============================================================================
@@ -17,9 +17,9 @@ export class Tokenizer {
     merges = new Map();
     addedTokens = new Map();
     specialTokens = new Set();
-    modelType = 'BPE';
-    unkToken = '[UNK]';
-    continuingSubwordPrefix = '##';
+    modelType = "BPE";
+    unkToken = "[UNK]";
+    continuingSubwordPrefix = "##";
     // Special token IDs
     // Note: These may be left undefined when not specified by the tokenizer.json.
     // All call-sites must defensively handle the undefined case.
@@ -75,7 +75,7 @@ export class Tokenizer {
      */
     static async fromJSON(json) {
         const tokenizer = new Tokenizer();
-        const data = typeof json === 'string' ? JSON.parse(json) : json;
+        const data = typeof json === "string" ? JSON.parse(json) : json;
         // Load model config
         if (data.model) {
             tokenizer.modelType = data.model.type;
@@ -93,27 +93,28 @@ export class Tokenizer {
                 }
             }
             // Model-specific config
-            tokenizer.unkToken = data.model.unk_token ?? '[UNK]';
-            tokenizer.continuingSubwordPrefix = data.model.continuing_subword_prefix ?? '##';
+            tokenizer.unkToken = data.model.unk_token ?? "[UNK]";
+            tokenizer.continuingSubwordPrefix =
+                data.model.continuing_subword_prefix ?? "##";
         }
         // Infer special token IDs from vocab if not provided via added_tokens.
         // Many HuggingFace tokenizer.json files keep [CLS]/[SEP]/[PAD]/[UNK]/[MASK]
         // in the base vocab, not in added_tokens.
         const inferFromVocab = (tok) => tokenizer.vocab.get(tok);
-        const padFromVocab = inferFromVocab('[PAD]');
+        const padFromVocab = inferFromVocab("[PAD]");
         if (padFromVocab !== undefined) {
             // Do not overwrite an explicit pad id that may have been set elsewhere.
             tokenizer.padTokenId ??= padFromVocab;
         }
-        const unkFromVocab = inferFromVocab('[UNK]');
+        const unkFromVocab = inferFromVocab("[UNK]");
         if (unkFromVocab !== undefined) {
             tokenizer.unkTokenId ??= unkFromVocab;
         }
-        tokenizer.clsTokenId ??= inferFromVocab('[CLS]');
-        tokenizer.sepTokenId ??= inferFromVocab('[SEP]');
-        tokenizer.maskTokenId ??= inferFromVocab('[MASK]');
-        tokenizer.bosTokenId ??= inferFromVocab('<s>');
-        tokenizer.eosTokenId ??= inferFromVocab('</s>');
+        tokenizer.clsTokenId ??= inferFromVocab("[CLS]");
+        tokenizer.sepTokenId ??= inferFromVocab("[SEP]");
+        tokenizer.maskTokenId ??= inferFromVocab("[MASK]");
+        tokenizer.bosTokenId ??= inferFromVocab("<s>");
+        tokenizer.eosTokenId ??= inferFromVocab("</s>");
         // Load added tokens
         if (data.added_tokens) {
             for (const token of data.added_tokens) {
@@ -124,19 +125,19 @@ export class Tokenizer {
                 }
                 // Detect special token types
                 const content = token.content.toLowerCase();
-                if (content.includes('pad'))
+                if (content.includes("pad"))
                     tokenizer.padTokenId ??= token.id;
-                if (content.includes('unk'))
+                if (content.includes("unk"))
                     tokenizer.unkTokenId ??= token.id;
-                if (content.includes('cls') || content === '[cls]')
+                if (content.includes("cls") || content === "[cls]")
                     tokenizer.clsTokenId = token.id;
-                if (content.includes('sep') || content === '[sep]')
+                if (content.includes("sep") || content === "[sep]")
                     tokenizer.sepTokenId = token.id;
-                if (content.includes('mask'))
+                if (content.includes("mask"))
                     tokenizer.maskTokenId = token.id;
-                if (content.includes('bos') || content === '<s>')
+                if (content.includes("bos") || content === "<s>")
                     tokenizer.bosTokenId = token.id;
-                if (content.includes('eos') || content === '</s>')
+                if (content.includes("eos") || content === "</s>")
                     tokenizer.eosTokenId = token.id;
             }
         }
@@ -163,14 +164,14 @@ export class Tokenizer {
         if (!response.ok) {
             throw new WebInferError(`Failed to load tokenizer from ${url}: ${response.status}`, ErrorCodes.MODEL_NOT_FOUND);
         }
-        const json = await response.json();
+        const json = (await response.json());
         return Tokenizer.fromJSON(json);
     }
     /**
      * Load from HuggingFace Hub
      */
     static async fromHuggingFace(modelId, options) {
-        const revision = options?.revision ?? 'main';
+        const revision = options?.revision ?? "main";
         const url = `https://huggingface.co/${modelId}/resolve/${revision}/tokenizer.json`;
         return Tokenizer.fromUrl(url);
     }
@@ -183,10 +184,10 @@ export class Tokenizer {
             result = result.toLowerCase();
         }
         if (this.stripAccents) {
-            result = result.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            result = result.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         }
         // Normalize whitespace
-        result = result.replace(/\s+/g, ' ').trim();
+        result = result.replace(/\s+/g, " ").trim();
         return result;
     }
     /**
@@ -196,7 +197,7 @@ export class Tokenizer {
         // NOTE: Different tokenizer models expect different pre-tokenization behavior.
         // - WordPiece (BERT): whitespace-separated words, punctuation kept separate.
         // - BPE (GPT-2): byte-level merges benefit from keeping leading spaces.
-        if (this.modelType === 'WordPiece') {
+        if (this.modelType === "WordPiece") {
             // Split into: words/numbers OR punctuation, dropping whitespace.
             const pattern = /\p{L}+|\p{N}+|[^\s\p{L}\p{N}]+/gu;
             const matches = text.match(pattern);
@@ -213,14 +214,16 @@ export class Tokenizer {
     textToBytes(text) {
         const encoder = new TextEncoder();
         const bytes = encoder.encode(text);
-        return Array.from(bytes).map(b => this.byteEncoder.get(b) ?? '').join('');
+        return Array.from(bytes)
+            .map((b) => this.byteEncoder.get(b) ?? "")
+            .join("");
     }
     /**
      * Decode bytes to text (for BPE)
      */
     bytesToText(text) {
-        const bytes = new Uint8Array(text.split('').map(c => this.byteDecoder.get(c) ?? 0));
-        const decoder = new TextDecoder('utf-8', { fatal: false });
+        const bytes = new Uint8Array(text.split("").map((c) => this.byteDecoder.get(c) ?? 0));
+        const decoder = new TextDecoder("utf-8", { fatal: false });
         return decoder.decode(bytes);
     }
     /**
@@ -240,11 +243,12 @@ export class Tokenizer {
         if (this.vocab.has(token)) {
             return [token];
         }
-        let word = token.split('');
+        let word = token.split("");
         let pairs = this.getPairs(word);
         if (pairs.size === 0) {
             return [token];
         }
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             // Find the pair with lowest merge rank
             let minPair = null;
@@ -258,7 +262,7 @@ export class Tokenizer {
             }
             if (minPair === null)
                 break;
-            const parts = minPair.split(' ');
+            const parts = minPair.split(" ");
             const first = parts[0];
             const second = parts[1];
             if (!first || !second)
@@ -272,7 +276,9 @@ export class Tokenizer {
                     break;
                 }
                 newWord.push(...word.slice(i, j));
-                if (word[j] === first && j < word.length - 1 && word[j + 1] === second) {
+                if (word[j] === first &&
+                    j < word.length - 1 &&
+                    word[j + 1] === second) {
                     newWord.push(first + second);
                     i = j + 2;
                 }
@@ -328,7 +334,7 @@ export class Tokenizer {
     tokenizeWord(word) {
         // WordPiece vocab never includes leading whitespace; strip it to avoid
         // producing [UNK] + per-character fallbacks for normal words like " Obama".
-        if (this.modelType === 'WordPiece') {
+        if (this.modelType === "WordPiece") {
             word = word.trimStart();
         }
         // Check added tokens first
@@ -336,12 +342,12 @@ export class Tokenizer {
             return [word];
         }
         switch (this.modelType) {
-            case 'BPE': {
+            case "BPE": {
                 // Convert to byte representation
                 const byteStr = this.textToBytes(word);
                 return this.bpe(byteStr);
             }
-            case 'WordPiece':
+            case "WordPiece":
                 return this.wordPiece(word);
             default:
                 return this.vocab.has(word) ? [word] : [this.unkToken];
@@ -357,8 +363,7 @@ export class Tokenizer {
         const tokens = [];
         let remaining = normalized;
         // Sort added tokens by length (longest first) for greedy matching
-        const sortedAddedTokens = Array.from(this.addedTokens.keys())
-            .sort((a, b) => b.length - a.length);
+        const sortedAddedTokens = Array.from(this.addedTokens.keys()).sort((a, b) => b.length - a.length);
         // Split by added tokens
         for (const addedToken of sortedAddedTokens) {
             if (remaining.includes(addedToken)) {
@@ -372,7 +377,7 @@ export class Tokenizer {
                         tokens.push(addedToken);
                     }
                 }
-                remaining = newRemaining.join(' ');
+                remaining = newRemaining.join(" ");
             }
         }
         // Pre-tokenize remaining text
@@ -391,7 +396,7 @@ export class Tokenizer {
      * Convert tokens to IDs
      */
     convertTokensToIds(tokens) {
-        return tokens.map(token => {
+        return tokens.map((token) => {
             // Check added tokens first
             const addedId = this.addedTokens.get(token);
             if (addedId !== undefined)
@@ -408,7 +413,7 @@ export class Tokenizer {
      * Convert IDs to tokens
      */
     convertIdsToTokens(ids) {
-        return ids.map(id => this.reverseVocab.get(id) ?? this.unkToken);
+        return ids.map((id) => this.reverseVocab.get(id) ?? this.unkToken);
     }
     /**
      * Apply post-processing (add special tokens)
@@ -439,22 +444,24 @@ export class Tokenizer {
             return { ids: result, typeIds };
         }
         // Use post-processor config
-        const template = pairIds ? this.postProcessor.pair : this.postProcessor.single;
+        const template = pairIds
+            ? this.postProcessor.pair
+            : this.postProcessor.single;
         if (!template) {
             return { ids, typeIds: ids.map(() => 0) };
         }
         const result = [];
         const typeIds = [];
         for (const item of template) {
-            if ('SpecialToken' in item) {
+            if ("SpecialToken" in item) {
                 const specialToken = this.postProcessor.special_tokens?.[item.SpecialToken.id];
                 if (specialToken) {
                     result.push(...specialToken.ids);
                     typeIds.push(...specialToken.ids.map(() => item.SpecialToken.type_id));
                 }
             }
-            else if ('Sequence' in item) {
-                const seqIds = item.Sequence.id === 'A' ? ids : pairIds ?? [];
+            else if ("Sequence" in item) {
+                const seqIds = item.Sequence.id === "A" ? ids : (pairIds ?? []);
                 result.push(...seqIds);
                 typeIds.push(...seqIds.map(() => item.Sequence.type_id));
             }
@@ -465,7 +472,7 @@ export class Tokenizer {
      * Encode text
      */
     encode(text, options = {}) {
-        const { addSpecialTokens = true, maxLength = this.maxLength, padding = 'max_length', truncation = true, returnAttentionMask = true, returnTokenTypeIds = false, textPair, } = options;
+        const { addSpecialTokens = true, maxLength = this.maxLength, padding = "max_length", truncation = true, returnAttentionMask = true, returnTokenTypeIds = false, textPair, } = options;
         // Tokenize
         const tokens = this.tokenize(text);
         let inputIds = this.convertTokensToIds(tokens);
@@ -503,14 +510,23 @@ export class Tokenizer {
             attentionMask = inputIds.map(() => 1);
         }
         // Padding
-        if (padding === 'max_length' && inputIds.length < maxLength) {
+        if (padding === "max_length" && inputIds.length < maxLength) {
             const padLength = maxLength - inputIds.length;
-            inputIds = [...inputIds, ...new Array(padLength).fill(this.padTokenId)];
+            inputIds = [
+                ...inputIds,
+                ...new Array(padLength).fill(this.padTokenId),
+            ];
             if (returnAttentionMask) {
-                attentionMask = [...attentionMask, ...new Array(padLength).fill(0)];
+                attentionMask = [
+                    ...attentionMask,
+                    ...new Array(padLength).fill(0),
+                ];
             }
             if (tokenTypeIds) {
-                tokenTypeIds = [...tokenTypeIds, ...new Array(padLength).fill(0)];
+                tokenTypeIds = [
+                    ...tokenTypeIds,
+                    ...new Array(padLength).fill(0),
+                ];
             }
         }
         const result = {
@@ -527,12 +543,16 @@ export class Tokenizer {
      */
     encodeBatch(texts, options = {}) {
         // For 'longest' padding, first encode all without padding
-        if (options.padding === 'longest') {
-            const encodings = texts.map(t => this.encode(t, { ...options, padding: 'do_not_pad' }));
-            const maxLen = Math.max(...encodings.map(e => e.inputIds.length));
-            return texts.map(t => this.encode(t, { ...options, maxLength: maxLen, padding: 'max_length' }));
+        if (options.padding === "longest") {
+            const encodings = texts.map((t) => this.encode(t, { ...options, padding: "do_not_pad" }));
+            const maxLen = Math.max(...encodings.map((e) => e.inputIds.length));
+            return texts.map((t) => this.encode(t, {
+                ...options,
+                maxLength: maxLen,
+                padding: "max_length",
+            }));
         }
-        return texts.map(t => this.encode(t, options));
+        return texts.map((t) => this.encode(t, options));
     }
     /**
      * Decode IDs to text
@@ -541,27 +561,27 @@ export class Tokenizer {
         let tokens = this.convertIdsToTokens(ids);
         // Filter special tokens
         if (skipSpecialTokens) {
-            tokens = tokens.filter(t => !this.specialTokens.has(t));
+            tokens = tokens.filter((t) => !this.specialTokens.has(t));
         }
         // Join tokens
-        let text = tokens.join('');
+        let text = tokens.join("");
         // For BPE, decode bytes
-        if (this.modelType === 'BPE') {
+        if (this.modelType === "BPE") {
             text = this.bytesToText(text);
         }
         // For WordPiece, handle ## prefix
-        if (this.modelType === 'WordPiece') {
-            text = text.replace(new RegExp(this.continuingSubwordPrefix, 'g'), '');
+        if (this.modelType === "WordPiece") {
+            text = text.replace(new RegExp(this.continuingSubwordPrefix, "g"), "");
         }
         // Clean up whitespace
-        text = text.replace(/\s+/g, ' ').trim();
+        text = text.replace(/\s+/g, " ").trim();
         return text;
     }
     /**
      * Decode batch
      */
     decodeBatch(batchIds, skipSpecialTokens = true) {
-        return batchIds.map(ids => this.decode(ids, skipSpecialTokens));
+        return batchIds.map((ids) => this.decode(ids, skipSpecialTokens));
     }
     /**
      * Get vocabulary size

@@ -1,10 +1,11 @@
 /**
  * WebInfer.js - Web Worker Support
- * 
+ *
  * Run inference in a Web Worker to avoid blocking the main thread.
  */
 
-import type { Tensor, RuntimeType } from './types.js';
+import type { Tensor, RuntimeType } from "./types.js";
+import { WebInferTensor } from "./tensor.js";
 
 // ============================================================================
 // Types
@@ -14,14 +15,14 @@ import type { Tensor, RuntimeType } from './types.js';
  * Worker message types
  */
 export type WorkerMessageType =
-  | 'init'
-  | 'load_model'
-  | 'run_inference'
-  | 'dispose'
-  | 'ready'
-  | 'result'
-  | 'error'
-  | 'progress';
+  | "init"
+  | "load_model"
+  | "run_inference"
+  | "dispose"
+  | "ready"
+  | "result"
+  | "error"
+  | "progress";
 
 /**
  * Worker message structure
@@ -93,9 +94,12 @@ export function serializeTensor(tensor: Tensor): SerializedTensor {
  * Deserialize a tensor from worker
  */
 export function deserializeTensor(serialized: SerializedTensor): Tensor {
-  const { WebInferTensor } = require('./tensor.js');
   const data = new Float32Array(serialized.data);
-  return new WebInferTensor(data, serialized.shape, serialized.dtype as 'float32');
+  return new WebInferTensor(
+    data,
+    serialized.shape,
+    serialized.dtype as "float32",
+  );
 }
 
 // ============================================================================
@@ -107,19 +111,22 @@ export function deserializeTensor(serialized: SerializedTensor): Tensor {
  */
 export class InferenceWorker {
   private worker: Worker | null = null;
-  private pendingRequests: Map<string, {
-    resolve: (result: unknown) => void;
-    reject: (error: Error) => void;
-  }> = new Map();
+  private pendingRequests: Map<
+    string,
+    {
+      resolve: (result: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  > = new Map();
   private isReady = false;
   private readyPromise: Promise<void>;
   private readyResolve!: () => void;
 
   constructor(workerUrl?: string) {
-    this.readyPromise = new Promise(resolve => {
+    this.readyPromise = new Promise((resolve) => {
       this.readyResolve = resolve;
     });
-    
+
     this.initWorker(workerUrl);
   }
 
@@ -129,18 +136,18 @@ export class InferenceWorker {
   private initWorker(workerUrl?: string): void {
     // Create worker from blob if no URL provided
     const url = workerUrl ?? this.createWorkerBlob();
-    
-    this.worker = new Worker(url, { type: 'module' });
-    
+
+    this.worker = new Worker(url, { type: "module" });
+
     this.worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
       this.handleMessage(event.data);
     };
-    
+
     this.worker.onerror = (error) => {
-      console.error('Worker error:', error);
+      console.error("Worker error:", error);
       // Reject all pending requests
       for (const [, { reject }] of this.pendingRequests) {
-        reject(new Error('Worker error'));
+        reject(new Error("Worker error"));
       }
       this.pendingRequests.clear();
     };
@@ -250,8 +257,8 @@ export class InferenceWorker {
         }
       };
     `;
-    
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
+
+    const blob = new Blob([workerCode], { type: "application/javascript" });
     return URL.createObjectURL(blob);
   }
 
@@ -259,7 +266,7 @@ export class InferenceWorker {
    * Handle worker message
    */
   private handleMessage(message: WorkerMessage): void {
-    if (message.type === 'ready') {
+    if (message.type === "ready") {
       this.isReady = true;
       this.readyResolve();
       return;
@@ -270,7 +277,7 @@ export class InferenceWorker {
 
     this.pendingRequests.delete(message.id);
 
-    if (message.type === 'error') {
+    if (message.type === "error") {
       const payload = message.payload as { message: string };
       request.reject(new Error(payload.message));
     } else {
@@ -281,21 +288,27 @@ export class InferenceWorker {
   /**
    * Send a request to the worker
    */
-  private async sendRequest<T>(type: WorkerMessageType, payload?: unknown): Promise<T> {
+  private async sendRequest<T>(
+    type: WorkerMessageType,
+    payload?: unknown,
+  ): Promise<T> {
     if (!this.worker) {
-      throw new Error('Worker not initialized');
+      throw new Error("Worker not initialized");
     }
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    
+
     return new Promise<T>((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve: resolve as (r: unknown) => void, reject });
-      
+      this.pendingRequests.set(id, {
+        resolve: resolve as (r: unknown) => void,
+        reject,
+      });
+
       const message: WorkerMessage = { id, type, payload };
-      
+
       // Transfer ArrayBuffers for efficiency
       const transfers: Transferable[] = [];
-      if (payload && typeof payload === 'object' && 'inputs' in payload) {
+      if (payload && typeof payload === "object" && "inputs" in payload) {
         const inputs = (payload as InferenceRequest).inputs;
         for (const input of inputs) {
           if (input.data instanceof ArrayBuffer) {
@@ -303,7 +316,7 @@ export class InferenceWorker {
           }
         }
       }
-      
+
       this.worker!.postMessage(message, transfers);
     });
   }
@@ -313,16 +326,22 @@ export class InferenceWorker {
    */
   async init(): Promise<void> {
     if (this.isReady) return;
-    await this.sendRequest('init');
+    await this.sendRequest("init");
     await this.readyPromise;
   }
 
   /**
    * Load a model
    */
-  async loadModel(url: string, options?: { runtime?: RuntimeType; cache?: boolean }): Promise<string> {
+  async loadModel(
+    url: string,
+    options?: { runtime?: RuntimeType; cache?: boolean },
+  ): Promise<string> {
     await this.init();
-    const result = await this.sendRequest<{ modelId: string }>('load_model', { url, options });
+    const result = await this.sendRequest<{ modelId: string }>("load_model", {
+      url,
+      options,
+    });
     return result.modelId;
   }
 
@@ -332,8 +351,8 @@ export class InferenceWorker {
   async runInference(modelId: string, inputs: Tensor[]): Promise<Tensor[]> {
     const serializedInputs = inputs.map(serializeTensor);
     const result = await this.sendRequest<{ outputs: SerializedTensor[] }>(
-      'run_inference',
-      { modelId, inputs: serializedInputs }
+      "run_inference",
+      { modelId, inputs: serializedInputs },
     );
     return result.outputs.map(deserializeTensor);
   }
@@ -342,7 +361,7 @@ export class InferenceWorker {
    * Dispose a model
    */
   async dispose(modelId: string): Promise<void> {
-    await this.sendRequest('dispose', { modelId });
+    await this.sendRequest("dispose", { modelId });
   }
 
   /**
@@ -370,9 +389,11 @@ export class WorkerPool {
   private modelAssignments: Map<string, number> = new Map();
 
   constructor(options: WorkerPoolOptions = {}) {
-    const numWorkers = options.numWorkers ??
-      (typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 4) ?? 4;
-    
+    const numWorkers =
+      options.numWorkers ??
+      (typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4) ??
+      4;
+
     for (let i = 0; i < numWorkers; i++) {
       this.workers.push(new InferenceWorker(options.workerUrl));
     }
@@ -402,7 +423,7 @@ export class WorkerPool {
    * Initialize all workers
    */
   async init(): Promise<void> {
-    await Promise.all(this.workers.map(w => w.init()));
+    await Promise.all(this.workers.map((w) => w.init()));
   }
 
   /**
@@ -410,7 +431,7 @@ export class WorkerPool {
    */
   async loadModel(
     url: string,
-    options?: { runtime?: RuntimeType; cache?: boolean }
+    options?: { runtime?: RuntimeType; cache?: boolean },
   ): Promise<string> {
     const worker = this.getNextWorker();
     const modelId = await worker.loadModel(url, options);
@@ -431,14 +452,14 @@ export class WorkerPool {
    */
   async runBatch(
     modelId: string,
-    batchInputs: Tensor[][]
+    batchInputs: Tensor[][],
   ): Promise<Tensor[][]> {
     // Distribute across workers
     const results = await Promise.all(
       batchInputs.map((inputs, i) => {
         const worker = this.workers[i % this.workers.length]!;
         return worker.runInference(modelId, inputs);
-      })
+      }),
     );
     return results;
   }
@@ -493,14 +514,14 @@ export function getWorkerPool(options?: WorkerPoolOptions): WorkerPool {
 export async function runInWorker(
   modelUrl: string,
   inputs: Tensor[],
-  options?: { cache?: boolean }
+  options?: { cache?: boolean },
 ): Promise<Tensor[]> {
   const pool = getWorkerPool();
   await pool.init();
-  
+
   const modelId = await pool.loadModel(modelUrl, options);
   const outputs = await pool.runInference(modelId, inputs);
-  
+
   return outputs;
 }
 
@@ -508,5 +529,5 @@ export async function runInWorker(
  * Check if Web Workers are supported
  */
 export function isWorkerSupported(): boolean {
-  return typeof Worker !== 'undefined';
+  return typeof Worker !== "undefined";
 }

@@ -3,7 +3,7 @@
  *
  * Model optimization, quantization, and analysis tools.
  */
-import { LoadedModel, QuantizationType } from '../core/types.js';
+import { LoadedModel, QuantizationType } from "../core/types.js";
 /**
  * Quantization options
  */
@@ -54,7 +54,7 @@ export interface PruningOptions {
     /** Target sparsity (0-1) */
     sparsity: number;
     /** Pruning method */
-    method?: 'magnitude' | 'random' | 'structured';
+    method?: "magnitude" | "random" | "structured";
     /** Layers to exclude */
     excludeLayers?: string[];
 }
@@ -136,16 +136,16 @@ export interface BenchmarkResult {
  * Benchmark model inference
  */
 export declare function benchmark(runFn: () => Promise<void>, options?: BenchmarkOptions): Promise<BenchmarkResult>;
-export { benchmark as runBenchmark, compareBenchmarks, benchmarkSuite, benchmarkMemory, formatBenchmarkResult, formatComparisonResult, } from './benchmark.js';
-export type { BenchmarkOptions as DetailedBenchmarkOptions, BenchmarkResult as DetailedBenchmarkResult, CompareBenchmarkResult, MemoryBenchmarkResult, } from './benchmark.js';
-export { quantizeModel, quantizeTensor, dequantizeTensor, pruneModel, pruneTensor, analyzeModel as analyzeModelDetailed, exportModel as exportModelAdvanced, dequantizeInt8, dequantizeUint8, dequantizeFloat16, float16ToFloat32, } from './quantization.js';
-export type { QuantizationType as QuantizationMethod, QuantizationOptions as AdvancedQuantizationOptions, QuantizationProgress, QuantizationResult as AdvancedQuantizationResult, LayerQuantizationStats, QuantizationStats, PruningOptions as AdvancedPruningOptions, PruningResult as AdvancedPruningResult, ModelAnalysis as DetailedModelAnalysis, ExportFormat, ExportOptions, } from './quantization.js';
-export { WebInferDebugger, getDebugger, enableDebugging, disableDebugging, inspectTensor, formatTensorInspection, createAsciiHistogram, createTensorHeatmap, visualizeModelArchitecture, } from './debugger.js';
-export type { DebuggerConfig, TensorInspection, TensorStats, HistogramData, InferenceTrace, OperationTrace, DebugEvent, PerformanceMetrics as DebugPerformanceMetrics, } from './debugger.js';
-export { PerformanceMonitor, getMonitor, startMonitoring, stopMonitoring, generateDashboardHTML, generateAsciiDashboard, } from './monitor.js';
-export type { MonitorConfig, PerformanceSample, InferenceMetrics, MemoryMetrics, SystemMetrics, AlertConfig, AlertEvent, WidgetData, } from './monitor.js';
+export { benchmark as runBenchmark, compareBenchmarks, benchmarkSuite, benchmarkMemory, formatBenchmarkResult, formatComparisonResult, } from "./benchmark.js";
+export type { BenchmarkOptions as DetailedBenchmarkOptions, BenchmarkResult as DetailedBenchmarkResult, CompareBenchmarkResult, MemoryBenchmarkResult, } from "./benchmark.js";
+export { quantizeModel, quantizeTensor, dequantizeTensor, pruneModel, pruneTensor, analyzeModel as analyzeModelDetailed, exportModel as exportModelAdvanced, dequantizeInt8, dequantizeUint8, dequantizeFloat16, float16ToFloat32, } from "./quantization.js";
+export type { QuantizationType as QuantizationMethod, QuantizationOptions as AdvancedQuantizationOptions, QuantizationProgress, QuantizationResult as AdvancedQuantizationResult, LayerQuantizationStats, QuantizationStats, PruningOptions as AdvancedPruningOptions, PruningResult as AdvancedPruningResult, ModelAnalysis as DetailedModelAnalysis, ExportFormat, ExportOptions, } from "./quantization.js";
+export { WebInferDebugger, getDebugger, enableDebugging, disableDebugging, inspectTensor, formatTensorInspection, createAsciiHistogram, createTensorHeatmap, visualizeModelArchitecture, } from "./debugger.js";
+export type { DebuggerConfig, TensorInspection, TensorStats, HistogramData, InferenceTrace, OperationTrace, DebugEvent, PerformanceMetrics as DebugPerformanceMetrics, } from "./debugger.js";
+export { PerformanceMonitor, getMonitor, startMonitoring, stopMonitoring, generateDashboardHTML, generateAsciiDashboard, } from "./monitor.js";
+export type { MonitorConfig, PerformanceSample, InferenceMetrics, MemoryMetrics, SystemMetrics, AlertConfig, AlertEvent, WidgetData, } from "./monitor.js";
 /**
  * Export model to different formats
  */
-export declare function exportModel(model: LoadedModel | ArrayBuffer, format: 'onnx' | 'json' | 'binary'): Promise<ArrayBuffer | string>;
+export declare function exportModel(model: LoadedModel | ArrayBuffer, format: "onnx" | "json" | "binary"): Promise<ArrayBuffer | string>;
 //# sourceMappingURL=index.d.ts.map

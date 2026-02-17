@@ -16,30 +16,40 @@
  */
 export async function quantize(model, options) {
     // Get model data
-    const modelData = model instanceof ArrayBuffer
-        ? model
-        : await getModelData(model);
+    const modelData = model instanceof ArrayBuffer ? model : await getModelData(model);
     const originalSize = modelData.byteLength;
     // Apply quantization based on method
     let quantizedData;
     let layersQuantized = 0;
     let layersSkipped = 0;
     switch (options.method) {
-        case 'int8':
-            ({ data: quantizedData, layersQuantized, layersSkipped } =
-                quantizeInt8(modelData, options));
+        case "int8":
+            ({
+                data: quantizedData,
+                layersQuantized,
+                layersSkipped,
+            } = quantizeInt8(modelData, options));
             break;
-        case 'uint8':
-            ({ data: quantizedData, layersQuantized, layersSkipped } =
-                quantizeUint8(modelData, options));
+        case "uint8":
+            ({
+                data: quantizedData,
+                layersQuantized,
+                layersSkipped,
+            } = quantizeUint8(modelData, options));
             break;
-        case 'float16':
-            ({ data: quantizedData, layersQuantized, layersSkipped } =
-                quantizeFloat16(modelData, options));
+        case "float16":
+            ({
+                data: quantizedData,
+                layersQuantized,
+                layersSkipped,
+            } = quantizeFloat16(modelData, options));
             break;
-        case 'int4':
-            ({ data: quantizedData, layersQuantized, layersSkipped } =
-                quantizeInt4(modelData, options));
+        case "int4":
+            ({
+                data: quantizedData,
+                layersQuantized,
+                layersSkipped,
+            } = quantizeInt4(modelData, options));
             break;
         default:
             quantizedData = modelData;
@@ -148,7 +158,7 @@ function quantizeInt4(data, _options) {
     for (let i = 0; i < input.length; i += 2) {
         const val1 = Math.round((input[i] ?? 0) / scale) + 8;
         const val2 = Math.round((input[i + 1] ?? 0) / scale) + 8;
-        output[i / 2] = ((val1 & 0xF) << 4) | (val2 & 0xF);
+        output[i / 2] = ((val1 & 0xf) << 4) | (val2 & 0xf);
     }
     return {
         data: output.buffer,
@@ -174,7 +184,7 @@ function float32ToFloat16(value) {
     if (e > 142) {
         // Too large, return infinity
         bits |= 0x7c00;
-        bits |= ((e === 255) ? 0 : 1) && (x & 0x007fffff);
+        bits |= (e === 255 ? 0 : 1) && x & 0x007fffff;
         return bits;
     }
     if (e < 113) {
@@ -191,9 +201,7 @@ function float32ToFloat16(value) {
  * Prune model weights
  */
 export async function prune(model, options) {
-    const modelData = model instanceof ArrayBuffer
-        ? model
-        : await getModelData(model);
+    const modelData = model instanceof ArrayBuffer ? model : await getModelData(model);
     const weights = new Float32Array(modelData);
     const total = weights.length;
     // Calculate threshold for magnitude pruning
@@ -221,9 +229,7 @@ export async function prune(model, options) {
  */
 export async function analyzeModel(model) {
     // Simplified analysis
-    const size = model instanceof ArrayBuffer
-        ? model.byteLength
-        : model.metadata.sizeBytes;
+    const size = model instanceof ArrayBuffer ? model.byteLength : model.metadata.sizeBytes;
     const estimatedParams = Math.floor(size / 4); // Assume float32
     return {
         totalParameters: estimatedParams,
@@ -241,7 +247,7 @@ export async function analyzeModel(model) {
  * Benchmark model inference
  */
 export async function benchmark(runFn, options = {}) {
-    const { warmupRuns = 3, runs = 10, } = options;
+    const { warmupRuns = 3, runs = 10 } = options;
     // Warmup
     for (let i = 0; i < warmupRuns; i++) {
         await runFn();
@@ -258,7 +264,7 @@ export async function benchmark(runFn, options = {}) {
     const avgTime = sum / times.length;
     const minTime = Math.min(...times);
     const maxTime = Math.max(...times);
-    const squaredDiffs = times.map(t => Math.pow(t - avgTime, 2));
+    const squaredDiffs = times.map((t) => Math.pow(t - avgTime, 2));
     const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / times.length;
     const stdDev = Math.sqrt(avgSquaredDiff);
     return {
@@ -273,19 +279,19 @@ export async function benchmark(runFn, options = {}) {
 // ============================================================================
 // Re-export benchmark utilities
 // ============================================================================
-export { benchmark as runBenchmark, compareBenchmarks, benchmarkSuite, benchmarkMemory, formatBenchmarkResult, formatComparisonResult, } from './benchmark.js';
+export { benchmark as runBenchmark, compareBenchmarks, benchmarkSuite, benchmarkMemory, formatBenchmarkResult, formatComparisonResult, } from "./benchmark.js";
 // ============================================================================
 // Re-export advanced quantization tools
 // ============================================================================
-export { quantizeModel, quantizeTensor, dequantizeTensor, pruneModel, pruneTensor, analyzeModel as analyzeModelDetailed, exportModel as exportModelAdvanced, dequantizeInt8, dequantizeUint8, dequantizeFloat16, float16ToFloat32, } from './quantization.js';
+export { quantizeModel, quantizeTensor, dequantizeTensor, pruneModel, pruneTensor, analyzeModel as analyzeModelDetailed, exportModel as exportModelAdvanced, dequantizeInt8, dequantizeUint8, dequantizeFloat16, float16ToFloat32, } from "./quantization.js";
 // ============================================================================
 // Re-export debugging tools
 // ============================================================================
-export { WebInferDebugger, getDebugger, enableDebugging, disableDebugging, inspectTensor, formatTensorInspection, createAsciiHistogram, createTensorHeatmap, visualizeModelArchitecture, } from './debugger.js';
+export { WebInferDebugger, getDebugger, enableDebugging, disableDebugging, inspectTensor, formatTensorInspection, createAsciiHistogram, createTensorHeatmap, visualizeModelArchitecture, } from "./debugger.js";
 // ============================================================================
 // Re-export monitoring tools
 // ============================================================================
-export { PerformanceMonitor, getMonitor, startMonitoring, stopMonitoring, generateDashboardHTML, generateAsciiDashboard, } from './monitor.js';
+export { PerformanceMonitor, getMonitor, startMonitoring, stopMonitoring, generateDashboardHTML, generateAsciiDashboard, } from "./monitor.js";
 // ============================================================================
 // Export Utilities
 // ============================================================================
@@ -293,16 +299,15 @@ export { PerformanceMonitor, getMonitor, startMonitoring, stopMonitoring, genera
  * Export model to different formats
  */
 export async function exportModel(model, format) {
-    const modelData = model instanceof ArrayBuffer
-        ? model
-        : await getModelData(model);
+    const modelData = model instanceof ArrayBuffer ? model : await getModelData(model);
     switch (format) {
-        case 'json':
+        case "json": {
             // Export as JSON (for small models)
             const array = new Float32Array(modelData);
             return JSON.stringify(Array.from(array));
-        case 'binary':
-        case 'onnx':
+        }
+        case "binary":
+        case "onnx":
         default:
             return modelData;
     }
