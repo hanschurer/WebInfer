@@ -7,8 +7,9 @@
 [![npm version](https://img.shields.io/npm/v/webinfer-js.svg)](https://www.npmjs.com/package/webinfer-js)
 [![install size](https://packagephobia.com/badge?p=webinfer-js)](https://packagephobia.com/result?p=webinfer-js)
 [![license](https://img.shields.io/npm/l/webinfer-js)](LICENSE)
+[![在线演示](https://img.shields.io/badge/演示-在线体验-brightgreen)](https://web-infer.vercel.app/)
 
-[文档](https://WebInfer.js.org) · [示例](examples/) · [API 参考](https://WebInfer.js.org/api) · [English](README.md) | [中文](README_CN.md)
+[文档](https://WebInfer.js.org) · [在线演示](https://web-infer.vercel.app/) · [示例](examples/) · [API 参考](https://WebInfer.js.org/api) · [English](README.md) | [中文](README_CN.md)
 
 </div>
 
@@ -48,11 +49,13 @@ pnpm add webinfer-js
 
 ### 体验 Demo
 
-在本地运行交互式 Demo 测试所有功能：
+**🌐 在线演示**：访问 **[https://web-infer.vercel.app/](https://web-infer.vercel.app/)** 立即在浏览器中体验！
+
+或在本地运行交互式 Demo 测试所有功能：
 
 ```bash
 # 克隆并安装
-git clone https://github.com/user/WebInfer.js.git
+git clone https://github.com/hanschurer/WebInfer.js.git
 cd WebInfer.js
 npm install
 

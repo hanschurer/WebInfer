@@ -35,3 +35,5 @@ temp/
 .temp/
 .vercel
 .env*.local
+/.agents
+/.agent/skills

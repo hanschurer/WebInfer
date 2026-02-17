@@ -7,8 +7,9 @@
 [![npm version](https://img.shields.io/npm/v/webinfer-js.svg)](https://www.npmjs.com/package/webinfer-js)
 [![install size](https://packagephobia.com/badge?p=webinfer-js)](https://packagephobia.com/result?p=webinfer-js)
 [![license](https://img.shields.io/npm/l/webinfer-js)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://web-infer.vercel.app/)
 
-[Documentation](https://WebInfer.js.org) · [Examples](examples/) · [API Reference](https://WebInfer.js.org/api) · [English](README.md) | [中文](README_CN.md)
+[Documentation](https://WebInfer.js.org) · [Live Demo](https://web-infer.vercel.app/) · [Examples](examples/) · [API Reference](https://WebInfer.js.org/api) · [English](README.md) | [中文](README_CN.md)
 
 </div>
 
@@ -48,7 +49,9 @@ pnpm add webinfer-js
 
 ### Try the Demo
 
-Run the interactive demo locally to test all features:
+**🌐 Online Demo**: Visit **[https://web-infer.vercel.app/](https://web-infer.vercel.app/)** to try it instantly in your browser!
+
+Or run the interactive demo locally to test all features:
 
 ```bash
 # Clone and install
