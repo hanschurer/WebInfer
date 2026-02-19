@@ -407,6 +407,7 @@ const features = {
       const info = [
         `<span class="success">✓ Model & Tokenizer loaded in ${time}s</span>`,
         `Name: ${state.model.metadata.name}`,
+        `Runtime: ${state.model.runtime || "unknown"}`,
         `Size: ${utils.formatBytes(state.model.metadata.sizeBytes)}`,
         `Inputs: ${state.model.metadata.inputs.map((i) => i.name).join(", ")}`,
         `Tokenizer: ${state.tokenizer ? "Loaded" : "Not found"}`,
@@ -416,6 +417,36 @@ const features = {
       ui.updateMemoryStatus();
     } catch (e) {
       ui.showError("model-output", e);
+    }
+  },
+
+  /**
+   * Clear loaded model
+   */
+  clearModel() {
+    if (state.model) {
+      if (state.model.dispose) state.model.dispose();
+      state.model = null;
+      state.tokenizer = null;
+      ui.setOutput("model-output", "Model unloaded", "info");
+      ui.updateMemoryStatus();
+    } else {
+      ui.setOutput("model-output", "No model loaded", "warn");
+    }
+  },
+
+  /**
+   * Clear loaded model
+   */
+  clearModel() {
+    if (state.model) {
+      if (state.model.dispose) state.model.dispose();
+      state.model = null;
+      state.tokenizer = null;
+      ui.setOutput("model-output", "Model unloaded", "info");
+      ui.updateMemoryStatus();
+    } else {
+      ui.setOutput("model-output", "No model loaded", "warn");
     }
   },
 
@@ -1022,6 +1053,7 @@ window.Demo = {
   // Model
   loadModel: () => features.loadModel(),
   testModel: () => features.testModel(),
+  clearModel: () => features.clearModel(),
 
   // Core
   testTensors: () => features.testTensors(),
