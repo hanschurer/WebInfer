@@ -436,21 +436,6 @@ const features = {
   },
 
   /**
-   * Clear loaded model
-   */
-  clearModel() {
-    if (state.model) {
-      if (state.model.dispose) state.model.dispose();
-      state.model = null;
-      state.tokenizer = null;
-      ui.setOutput("model-output", "Model unloaded", "info");
-      ui.updateMemoryStatus();
-    } else {
-      ui.setOutput("model-output", "No model loaded", "warn");
-    }
-  },
-
-  /**
    * Test model inference
    */
   async testModel() {

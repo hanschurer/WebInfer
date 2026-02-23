@@ -3408,6 +3408,11 @@ var ONNXRuntime = class {
   async unloadModel(modelId) {
     const sessionData = sessionStore.get(modelId);
     if (sessionData) {
+      try {
+        await sessionData.session.release();
+      } catch (e) {
+        console.warn(`Failed to release ONNX session for model ${modelId}:`, e);
+      }
       sessionStore.delete(modelId);
     }
   }

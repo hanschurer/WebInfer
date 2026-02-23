@@ -1,10 +1,10 @@
 /**
  * WebInfer.js - ONNX Runtime Backend
- * 
+ *
  * Uses onnxruntime-web for real ONNX model inference.
  */
 
-import * as ort from 'onnxruntime-web';
+import * as ort from "onnxruntime-web";
 import {
   Runtime,
   RuntimeType,
@@ -16,10 +16,10 @@ import {
   WebInferError,
   ErrorCodes,
   DataType,
-} from '../core/types.js';
-import { LoadedModelImpl } from '../core/runtime.js';
-import { WebInferTensor } from '../core/tensor.js';
-import { getMemoryManager } from '../core/memory.js';
+} from "../core/types.js";
+import { LoadedModelImpl } from "../core/runtime.js";
+import { WebInferTensor } from "../core/tensor.js";
+import { getMemoryManager } from "../core/memory.js";
 
 // ============================================================================
 // ONNX Session Storage
@@ -41,16 +41,16 @@ const sessionStore: Map<string, ONNXSessionData> = new Map();
  * ONNXRuntime - Real ONNX model inference using onnxruntime-web
  */
 export class ONNXRuntime implements Runtime {
-  readonly name: RuntimeType = 'wasm'; // Register as wasm since it's the fallback
-  
+  readonly name: RuntimeType = "wasm"; // Register as wasm since it's the fallback
+
   private initialized = false;
-  private executionProvider: 'webgpu' | 'wasm' = 'wasm';
+  private executionProvider: "webgpu" | "wasm" = "wasm";
 
   get capabilities(): RuntimeCapabilities {
     return {
       concurrency: true,
       quantization: true,
-      float16: this.executionProvider === 'webgpu',
+      float16: this.executionProvider === "webgpu",
       dynamicShapes: true,
       maxBatchSize: 32,
       availableMemory: 512 * 1024 * 1024, // 512MB
@@ -71,12 +71,13 @@ export class ONNXRuntime implements Runtime {
     if (this.initialized) return;
 
     // Configure WASM paths for CDN loading (required for browser deployment)
-    if (typeof window !== 'undefined') {
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+    if (typeof window !== "undefined") {
+      ort.env.wasm.wasmPaths =
+        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/";
     }
 
     // Use WASM execution provider (most compatible)
-    this.executionProvider = 'wasm';
+    this.executionProvider = "wasm";
 
     this.initialized = true;
   }
@@ -86,7 +87,7 @@ export class ONNXRuntime implements Runtime {
    */
   async loadModel(
     modelData: ArrayBuffer,
-    options: ModelLoadOptions = {}
+    options: ModelLoadOptions = {},
   ): Promise<LoadedModel> {
     if (!this.initialized) {
       await this.initialize();
@@ -96,13 +97,16 @@ export class ONNXRuntime implements Runtime {
       // Create session options
       const sessionOptions = {
         executionProviders: [this.executionProvider],
-        graphOptimizationLevel: 'all' as const,
+        graphOptimizationLevel: "all" as const,
       };
 
       // Create inference session (convert ArrayBuffer to Uint8Array)
       const modelBytes = new Uint8Array(modelData);
-      const session = await ort.InferenceSession.create(modelBytes, sessionOptions);
-      
+      const session = await ort.InferenceSession.create(
+        modelBytes,
+        sessionOptions,
+      );
+
       // Get input/output names
       const inputNames = session.inputNames;
       const outputNames = session.outputNames;
@@ -119,32 +123,30 @@ export class ONNXRuntime implements Runtime {
 
       // Create metadata
       const metadata: ModelMetadata = {
-        name: options.metadata?.name ?? 'onnx-model',
-        version: '1.0.0',
-        inputs: inputNames.map(name => ({
+        name: options.metadata?.name ?? "onnx-model",
+        version: "1.0.0",
+        inputs: inputNames.map((name) => ({
           name,
-          dtype: 'float32' as DataType,
+          dtype: "float32" as DataType,
           shape: [-1], // Dynamic shape
         })),
-        outputs: outputNames.map(name => ({
+        outputs: outputNames.map((name) => ({
           name,
-          dtype: 'float32' as DataType,
+          dtype: "float32" as DataType,
           shape: [-1],
         })),
         sizeBytes: modelData.byteLength,
-        quantization: options.quantization ?? 'float32',
-        format: 'onnx',
+        quantization: options.quantization ?? "float32",
+        format: "onnx",
       };
 
       // Create model instance
-      const model = new LoadedModelImpl(
-        metadata,
-        'wasm',
-        () => this.unloadModel(modelId)
+      const model = new LoadedModelImpl(metadata, "wasm", () =>
+        this.unloadModel(modelId),
       );
 
       // Override the ID to match our stored session
-      Object.defineProperty(model, 'id', { value: modelId, writable: false });
+      Object.defineProperty(model, "id", { value: modelId, writable: false });
 
       // Track in memory manager
       getMemoryManager().trackModel(model, () => model.dispose());
@@ -154,7 +156,7 @@ export class ONNXRuntime implements Runtime {
       throw new WebInferError(
         `Failed to load ONNX model: ${error instanceof Error ? error.message : String(error)}`,
         ErrorCodes.MODEL_LOAD_FAILED,
-        { error }
+        { error },
       );
     }
   }
@@ -168,7 +170,7 @@ export class ONNXRuntime implements Runtime {
       throw new WebInferError(
         `ONNX session not found for model ${model.id}`,
         ErrorCodes.MODEL_NOT_LOADED,
-        { modelId: model.id }
+        { modelId: model.id },
       );
     }
 
@@ -177,28 +179,40 @@ export class ONNXRuntime implements Runtime {
     try {
       // Prepare input feeds
       const feeds: Record<string, any> = {};
-      
+
       for (let i = 0; i < Math.min(inputs.length, inputNames.length); i++) {
         const inputName = inputNames[i];
         const inputTensor = inputs[i] as WebInferTensor;
-        
+
         if (inputName && inputTensor) {
           // Convert to ONNX tensor with correct dtype
           const dtype = inputTensor.dtype;
           let ortTensor: any;
-          
-          if (dtype === 'int64') {
+
+          if (dtype === "int64") {
             // Get raw BigInt64Array data directly
             const data = inputTensor.data as unknown as BigInt64Array;
-            ortTensor = new ort.Tensor('int64', data, inputTensor.shape as number[]);
-          } else if (dtype === 'int32') {
+            ortTensor = new ort.Tensor(
+              "int64",
+              data,
+              inputTensor.shape as number[],
+            );
+          } else if (dtype === "int32") {
             const data = inputTensor.data as Int32Array;
-            ortTensor = new ort.Tensor('int32', data, inputTensor.shape as number[]);
+            ortTensor = new ort.Tensor(
+              "int32",
+              data,
+              inputTensor.shape as number[],
+            );
           } else {
             const data = inputTensor.toFloat32Array();
-            ortTensor = new ort.Tensor('float32', data, inputTensor.shape as number[]);
+            ortTensor = new ort.Tensor(
+              "float32",
+              data,
+              inputTensor.shape as number[],
+            );
           }
-          
+
           feeds[inputName] = ortTensor;
         }
       }
@@ -208,13 +222,15 @@ export class ONNXRuntime implements Runtime {
 
       // Convert outputs to WebInferTensor
       const outputs: Tensor[] = [];
-      
+
       for (const outputName of outputNames) {
         const ortTensor = results[outputName];
         if (ortTensor) {
           const data = ortTensor.data as Float32Array;
-          const shape = Array.from(ortTensor.dims).map(d => Number(d));
-          outputs.push(new WebInferTensor(new Float32Array(data), shape, 'float32'));
+          const shape = Array.from(ortTensor.dims).map((d) => Number(d));
+          outputs.push(
+            new WebInferTensor(new Float32Array(data), shape, "float32"),
+          );
         }
       }
 
@@ -223,7 +239,7 @@ export class ONNXRuntime implements Runtime {
       throw new WebInferError(
         `ONNX inference failed: ${error instanceof Error ? error.message : String(error)}`,
         ErrorCodes.INFERENCE_FAILED,
-        { modelId: model.id, error }
+        { modelId: model.id, error },
       );
     }
   }
@@ -234,7 +250,11 @@ export class ONNXRuntime implements Runtime {
   private async unloadModel(modelId: string): Promise<void> {
     const sessionData = sessionStore.get(modelId);
     if (sessionData) {
-      // Release session will be handled by GC
+      try {
+        await sessionData.session.release();
+      } catch (e) {
+        console.warn(`Failed to release ONNX session for model ${modelId}:`, e);
+      }
       sessionStore.delete(modelId);
     }
   }

@@ -3,11 +3,11 @@
  *
  * Uses onnxruntime-web for real ONNX model inference.
  */
-import * as ort from 'onnxruntime-web';
-import { WebInferError, ErrorCodes, } from '../core/types.js';
-import { LoadedModelImpl } from '../core/runtime.js';
-import { WebInferTensor } from '../core/tensor.js';
-import { getMemoryManager } from '../core/memory.js';
+import * as ort from "onnxruntime-web";
+import { WebInferError, ErrorCodes, } from "../core/types.js";
+import { LoadedModelImpl } from "../core/runtime.js";
+import { WebInferTensor } from "../core/tensor.js";
+import { getMemoryManager } from "../core/memory.js";
 const sessionStore = new Map();
 // ============================================================================
 // ONNX Runtime Implementation
@@ -16,14 +16,14 @@ const sessionStore = new Map();
  * ONNXRuntime - Real ONNX model inference using onnxruntime-web
  */
 export class ONNXRuntime {
-    name = 'wasm'; // Register as wasm since it's the fallback
+    name = "wasm"; // Register as wasm since it's the fallback
     initialized = false;
-    executionProvider = 'wasm';
+    executionProvider = "wasm";
     get capabilities() {
         return {
             concurrency: true,
             quantization: true,
-            float16: this.executionProvider === 'webgpu',
+            float16: this.executionProvider === "webgpu",
             dynamicShapes: true,
             maxBatchSize: 32,
             availableMemory: 512 * 1024 * 1024, // 512MB
@@ -42,11 +42,12 @@ export class ONNXRuntime {
         if (this.initialized)
             return;
         // Configure WASM paths for CDN loading (required for browser deployment)
-        if (typeof window !== 'undefined') {
-            ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+        if (typeof window !== "undefined") {
+            ort.env.wasm.wasmPaths =
+                "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/";
         }
         // Use WASM execution provider (most compatible)
-        this.executionProvider = 'wasm';
+        this.executionProvider = "wasm";
         this.initialized = true;
     }
     /**
@@ -60,7 +61,7 @@ export class ONNXRuntime {
             // Create session options
             const sessionOptions = {
                 executionProviders: [this.executionProvider],
-                graphOptimizationLevel: 'all',
+                graphOptimizationLevel: "all",
             };
             // Create inference session (convert ArrayBuffer to Uint8Array)
             const modelBytes = new Uint8Array(modelData);
@@ -78,26 +79,26 @@ export class ONNXRuntime {
             });
             // Create metadata
             const metadata = {
-                name: options.metadata?.name ?? 'onnx-model',
-                version: '1.0.0',
-                inputs: inputNames.map(name => ({
+                name: options.metadata?.name ?? "onnx-model",
+                version: "1.0.0",
+                inputs: inputNames.map((name) => ({
                     name,
-                    dtype: 'float32',
+                    dtype: "float32",
                     shape: [-1], // Dynamic shape
                 })),
-                outputs: outputNames.map(name => ({
+                outputs: outputNames.map((name) => ({
                     name,
-                    dtype: 'float32',
+                    dtype: "float32",
                     shape: [-1],
                 })),
                 sizeBytes: modelData.byteLength,
-                quantization: options.quantization ?? 'float32',
-                format: 'onnx',
+                quantization: options.quantization ?? "float32",
+                format: "onnx",
             };
             // Create model instance
-            const model = new LoadedModelImpl(metadata, 'wasm', () => this.unloadModel(modelId));
+            const model = new LoadedModelImpl(metadata, "wasm", () => this.unloadModel(modelId));
             // Override the ID to match our stored session
-            Object.defineProperty(model, 'id', { value: modelId, writable: false });
+            Object.defineProperty(model, "id", { value: modelId, writable: false });
             // Track in memory manager
             getMemoryManager().trackModel(model, () => model.dispose());
             return model;
@@ -125,18 +126,18 @@ export class ONNXRuntime {
                     // Convert to ONNX tensor with correct dtype
                     const dtype = inputTensor.dtype;
                     let ortTensor;
-                    if (dtype === 'int64') {
+                    if (dtype === "int64") {
                         // Get raw BigInt64Array data directly
                         const data = inputTensor.data;
-                        ortTensor = new ort.Tensor('int64', data, inputTensor.shape);
+                        ortTensor = new ort.Tensor("int64", data, inputTensor.shape);
                     }
-                    else if (dtype === 'int32') {
+                    else if (dtype === "int32") {
                         const data = inputTensor.data;
-                        ortTensor = new ort.Tensor('int32', data, inputTensor.shape);
+                        ortTensor = new ort.Tensor("int32", data, inputTensor.shape);
                     }
                     else {
                         const data = inputTensor.toFloat32Array();
-                        ortTensor = new ort.Tensor('float32', data, inputTensor.shape);
+                        ortTensor = new ort.Tensor("float32", data, inputTensor.shape);
                     }
                     feeds[inputName] = ortTensor;
                 }
@@ -149,8 +150,8 @@ export class ONNXRuntime {
                 const ortTensor = results[outputName];
                 if (ortTensor) {
                     const data = ortTensor.data;
-                    const shape = Array.from(ortTensor.dims).map(d => Number(d));
-                    outputs.push(new WebInferTensor(new Float32Array(data), shape, 'float32'));
+                    const shape = Array.from(ortTensor.dims).map((d) => Number(d));
+                    outputs.push(new WebInferTensor(new Float32Array(data), shape, "float32"));
                 }
             }
             return outputs;
@@ -165,7 +166,12 @@ export class ONNXRuntime {
     async unloadModel(modelId) {
         const sessionData = sessionStore.get(modelId);
         if (sessionData) {
-            // Release session will be handled by GC
+            try {
+                await sessionData.session.release();
+            }
+            catch (e) {
+                console.warn(`Failed to release ONNX session for model ${modelId}:`, e);
+            }
             sessionStore.delete(modelId);
         }
     }

@@ -3,7 +3,7 @@
  *
  * Uses onnxruntime-web for real ONNX model inference.
  */
-import { Runtime, RuntimeType, RuntimeCapabilities, LoadedModel, ModelLoadOptions, Tensor } from '../core/types.js';
+import { Runtime, RuntimeType, RuntimeCapabilities, LoadedModel, ModelLoadOptions, Tensor } from "../core/types.js";
 /**
  * ONNXRuntime - Real ONNX model inference using onnxruntime-web
  */
