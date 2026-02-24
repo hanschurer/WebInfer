@@ -26,7 +26,7 @@ import { getMemoryManager } from "../core/memory.js";
 // ============================================================================
 
 interface ONNXSessionData {
-  session: any; // ort.InferenceSession
+  session: ort.InferenceSession;
   inputNames: string[];
   outputNames: string[];
 }
@@ -178,7 +178,7 @@ export class ONNXRuntime implements Runtime {
 
     try {
       // Prepare input feeds
-      const feeds: Record<string, any> = {};
+      const feeds: Record<string, ort.Tensor> = {};
 
       for (let i = 0; i < Math.min(inputs.length, inputNames.length); i++) {
         const inputName = inputNames[i];
@@ -187,7 +187,7 @@ export class ONNXRuntime implements Runtime {
         if (inputName && inputTensor) {
           // Convert to ONNX tensor with correct dtype
           const dtype = inputTensor.dtype;
-          let ortTensor: any;
+          let ortTensor: ort.Tensor;
 
           if (dtype === "int64") {
             // Get raw BigInt64Array data directly
@@ -226,11 +226,33 @@ export class ONNXRuntime implements Runtime {
       for (const outputName of outputNames) {
         const ortTensor = results[outputName];
         if (ortTensor) {
-          const data = ortTensor.data as Float32Array;
           const shape = Array.from(ortTensor.dims).map((d) => Number(d));
-          outputs.push(
-            new WebInferTensor(new Float32Array(data), shape, "float32"),
-          );
+
+          if (ortTensor.type === "int64") {
+            outputs.push(
+              new WebInferTensor(
+                new BigInt64Array(ortTensor.data as BigInt64Array),
+                shape,
+                "int64",
+              ),
+            );
+          } else if (ortTensor.type === "int32") {
+            outputs.push(
+              new WebInferTensor(
+                new Int32Array(ortTensor.data as Int32Array),
+                shape,
+                "int32",
+              ),
+            );
+          } else {
+            outputs.push(
+              new WebInferTensor(
+                new Float32Array(ortTensor.data as Float32Array),
+                shape,
+                "float32",
+              ),
+            );
+          }
         }
       }
 

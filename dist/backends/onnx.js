@@ -149,9 +149,16 @@ export class ONNXRuntime {
             for (const outputName of outputNames) {
                 const ortTensor = results[outputName];
                 if (ortTensor) {
-                    const data = ortTensor.data;
                     const shape = Array.from(ortTensor.dims).map((d) => Number(d));
-                    outputs.push(new WebInferTensor(new Float32Array(data), shape, "float32"));
+                    if (ortTensor.type === "int64") {
+                        outputs.push(new WebInferTensor(new BigInt64Array(ortTensor.data), shape, "int64"));
+                    }
+                    else if (ortTensor.type === "int32") {
+                        outputs.push(new WebInferTensor(new Int32Array(ortTensor.data), shape, "int32"));
+                    }
+                    else {
+                        outputs.push(new WebInferTensor(new Float32Array(ortTensor.data), shape, "float32"));
+                    }
                 }
             }
             return outputs;
