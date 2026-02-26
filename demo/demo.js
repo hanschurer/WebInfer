@@ -880,7 +880,10 @@ const features = {
       const before = WebInfer.getMemoryStats();
 
       for (let i = 0; i < 10; i++) {
-        state.testTensors.push(WebInfer.random([100, 100]));
+        const t = WebInfer.random([100, 100]);
+        // Explicitly track the tensor to show up in the demo stats
+        WebInfer.getMemoryManager().track(t);
+        state.testTensors.push(t);
       }
 
       const after = WebInfer.getMemoryStats();
