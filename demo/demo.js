@@ -376,7 +376,34 @@ const features = {
 
     try {
       const start = performance.now();
-      state.model = await WebInfer.loadModel(url, { runtime: "wasm" });
+      state.model = await WebInfer.loadModel(url, {
+        runtime: "wasm",
+        onProgress: (progress) => {
+          if (!progress) return;
+          const percentStr = (progress.percent || 0).toFixed(1);
+          let detailStr = "";
+
+          if (progress.total > 0) {
+            const loadedMB = (progress.loaded / 1024 / 1024).toFixed(1);
+            const totalMB = (progress.total / 1024 / 1024).toFixed(1);
+            detailStr = `${loadedMB}MB / ${totalMB}MB`;
+          } else if (progress.loaded > 0) {
+            const loadedMB = (progress.loaded / 1024 / 1024).toFixed(1);
+            detailStr = `${loadedMB}MB`;
+          }
+
+          let speedStr = "";
+          if (progress.speed > 0) {
+            speedStr = `${(progress.speed / 1024 / 1024).toFixed(1)} MB/s`;
+          }
+
+          let text = `Downloading model... ${percentStr}%`;
+          if (detailStr) text += ` (${detailStr})`;
+          if (speedStr) text += ` - ${speedStr}`;
+
+          ui.showLoading("model-output", text);
+        },
+      });
 
       // Attempt to load tokenizer
       // Assuming structure: .../onnx/model.onnx -> .../tokenizer.json
@@ -623,6 +650,31 @@ const features = {
       state.nerPipeline = await WebInfer.pipeline("token-classification", {
         model: "default",
         runtime: "wasm",
+        onProgress: (progress) => {
+          if (!progress) return;
+          const percentStr = (progress.percent || 0).toFixed(1);
+          let detailStr = "";
+
+          if (progress.total > 0) {
+            const loadedMB = (progress.loaded / 1024 / 1024).toFixed(1);
+            const totalMB = (progress.total / 1024 / 1024).toFixed(1);
+            detailStr = `${loadedMB}MB / ${totalMB}MB`;
+          } else if (progress.loaded > 0) {
+            const loadedMB = (progress.loaded / 1024 / 1024).toFixed(1);
+            detailStr = `${loadedMB}MB`;
+          }
+
+          let speedStr = "";
+          if (progress.speed > 0) {
+            speedStr = `${(progress.speed / 1024 / 1024).toFixed(1)} MB/s`;
+          }
+
+          let text = `Downloading NER model... ${percentStr}%`;
+          if (detailStr) text += ` (${detailStr})`;
+          if (speedStr) text += ` - ${speedStr}`;
+
+          ui.showLoading("ner-output", text);
+        },
       });
 
       ui.showSuccess("ner-output", "NER model ready");
