@@ -234,6 +234,15 @@ export class WebNNRuntime implements Runtime {
       format: 'WebInfer',
     };
 
+    // Store model data for later unloading
+    this.models.set(modelId, {
+      graph: null as unknown as MLGraph,
+      builder: null as unknown as MLGraphBuilder,
+      inputNames: config.inputs.map(i => i.name),
+      outputNames: config.outputs.map(o => o.name),
+      config,
+    });
+
     // Create model instance
     const model = new LoadedModelImpl(
       metadata,

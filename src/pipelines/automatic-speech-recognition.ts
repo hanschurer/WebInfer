@@ -145,7 +145,7 @@ export class AutomaticSpeechRecognitionPipeline extends BasePipeline<AudioInput 
     outputs: WebInferTensor[],
     options?: PipelineOptions
   ): Promise<ASRResult | ASRResult[]> {
-    const opts = options as ASROptions ?? {};
+    const opts = (options as ASROptions) ?? {};
     const returnTimestamps = opts.returnTimestamps ?? false;
 
     if (!outputs[0]) {

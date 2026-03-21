@@ -288,7 +288,7 @@ export async function downloadModel(
   ) => {
     if (options.onProgress) {
       const baseProgress = (currentStep / totalSteps) * 100;
-      const stepProgress = (progress.percent / totalSteps);
+      const stepProgress = progress.percent / totalSteps;
       
       options.onProgress({
         file,

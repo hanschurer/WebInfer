@@ -175,28 +175,23 @@ export class TextClassificationPipeline extends BasePipeline<
     const topK = options?.topK ?? 1;
     const returnAllScores = options?.returnAllScores ?? false;
 
+    // Build sorted predictions
+    const predictions: { label: string; score: number }[] = [];
+    for (let i = 0; i < probsArray.length; i++) {
+      predictions.push({
+        label: options?.labels?.[i] ?? this.labels[i] ?? `class_${i}`,
+        score: probsArray[i] ?? 0,
+      });
+    }
+    predictions.sort((a, b) => b.score - a.score);
+
     if (returnAllScores || topK > 1) {
-      // Return multiple results - for simplicity, return top-1 here
-      // Full implementation would return sorted array
+      const results = predictions.slice(0, returnAllScores ? predictions.length : topK);
+      // Return the top result (pipeline signature returns single result)
+      return results[0] ?? { label: 'unknown', score: 0 };
     }
 
-    // Find argmax
-    let maxIdx = 0;
-    let maxScore = probsArray[0] ?? 0;
-    
-    for (let i = 1; i < probsArray.length; i++) {
-      if ((probsArray[i] ?? 0) > maxScore) {
-        maxScore = probsArray[i] ?? 0;
-        maxIdx = i;
-      }
-    }
-
-    const label = options?.labels?.[maxIdx] ?? this.labels[maxIdx] ?? `class_${maxIdx}`;
-
-    return {
-      label,
-      score: maxScore,
-    };
+    return predictions[0] ?? { label: 'unknown', score: 0 };
   }
 }
 

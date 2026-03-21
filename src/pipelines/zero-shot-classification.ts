@@ -107,7 +107,7 @@ export class ZeroShotClassificationPipeline extends BasePipeline<
     await this.initialize();
     
     const { text, candidateLabels } = input;
-    const opts = options as ZeroShotClassificationOptions ?? {};
+    const opts = (options as ZeroShotClassificationOptions) ?? {};
     const texts = Array.isArray(text) ? text : [text];
     const template = opts.hypothesisTemplate ?? this.hypothesisTemplate;
     const multiLabel = opts.multiLabel ?? false;
@@ -178,8 +178,8 @@ export class ZeroShotClassificationPipeline extends BasePipeline<
       throw new Error('Tokenizer not set. Call setTokenizer() first.');
     }
 
-    // Encode premise-hypothesis pair (for future model integration)
-    this.tokenizer.encode(premise, {
+    // Encode premise-hypothesis pair
+    const encoded = this.tokenizer.encode(premise, {
       textPair: hypothesis,
       addSpecialTokens: true,
       maxLength: 512,
@@ -189,10 +189,17 @@ export class ZeroShotClassificationPipeline extends BasePipeline<
     });
 
     // For NLI models, output is typically [contradiction, neutral, entailment]
-    // Return the entailment score
-    
-    // Simplified: return random score for now (real implementation needs model output)
-    return Math.random();
+    // Use a deterministic heuristic based on token overlap as a fallback
+    // when no real NLI model is loaded. A real implementation would run
+    // the encoded input through the model and return the entailment logit.
+    const premiseTokens = new Set(encoded.inputIds.slice(0, Math.floor(encoded.inputIds.length / 2)));
+    const hypothesisTokens = encoded.inputIds.slice(Math.floor(encoded.inputIds.length / 2));
+    let overlap = 0;
+    for (const token of hypothesisTokens) {
+      if (premiseTokens.has(token)) overlap++;
+    }
+    const overlapRatio = hypothesisTokens.length > 0 ? overlap / hypothesisTokens.length : 0;
+    return overlapRatio * 4 - 2; // Scale to roughly [-2, 2] range for softmax
   }
 
   /**

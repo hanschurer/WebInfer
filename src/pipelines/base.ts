@@ -115,19 +115,16 @@ export abstract class BasePipeline<TInput, TOutput extends PipelineResult | Pipe
   protected async loadModelWithCache(modelPath: string): Promise<LoadedModel> {
     // Try download cache first
     const cachedResponse = await this.downloadCache.get(modelPath);
-    if (cachedResponse) {
-      // Use cached data
-    }
-
-    // Download and cache (or use mock for now)
-    try {
-      const response = await fetch(modelPath);
-      if (response.ok) {
-        // Cache the response
-        await this.downloadCache.put(modelPath, response.clone());
+    if (!cachedResponse) {
+      // Download and cache
+      try {
+        const response = await fetch(modelPath);
+        if (response.ok) {
+          await this.downloadCache.put(modelPath, response.clone());
+        }
+      } catch {
+        // Ignore fetch errors for demo
       }
-    } catch {
-      // Ignore fetch errors for demo
     }
 
     // Load into runtime

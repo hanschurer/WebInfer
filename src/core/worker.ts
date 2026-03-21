@@ -4,7 +4,7 @@
  * Run inference in a Web Worker to avoid blocking the main thread.
  */
 
-import type { Tensor, RuntimeType } from "./types.js";
+import type { Tensor, RuntimeType, DataType } from "./types.js";
 import { WebInferTensor } from "./tensor.js";
 
 // ============================================================================
@@ -98,7 +98,7 @@ export function deserializeTensor(serialized: SerializedTensor): Tensor {
   return new WebInferTensor(
     data,
     serialized.shape,
-    serialized.dtype as "float32",
+    serialized.dtype as DataType,
   );
 }
 

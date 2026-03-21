@@ -121,7 +121,7 @@ export class WebInferTensor implements Tensor {
         }
       } else {
         for (let i = 0; i < data.length; i++) {
-          (this._data as Float32Array)[i] = data[i] ?? 0;
+          (this._data as unknown as { [index: number]: number })[i] = data[i] ?? 0;
         }
       }
     } else {
@@ -276,7 +276,11 @@ export class WebInferTensor implements Tensor {
       stride *= dim;
     }
 
-    (this._data as Float32Array)[flatIndex] = value;
+    if (this.dtype === 'int64') {
+      (this._data as unknown as BigInt64Array)[flatIndex] = BigInt(Math.round(value));
+    } else {
+      (this._data as unknown as { [index: number]: number })[flatIndex] = value;
+    }
   }
 
   /**
@@ -473,13 +477,19 @@ export function linspace(
   num: number = 50, 
   dtype: DataType = 'float32'
 ): WebInferTensor {
-  const data = new Float32Array(num);
-  const step = (stop - start) / (num - 1);
-  
-  for (let i = 0; i < num; i++) {
-    data[i] = start + i * step;
+  if (num <= 0) {
+    return new WebInferTensor(new Float32Array(0), [0], dtype);
   }
-  
+  const data = new Float32Array(num);
+  if (num === 1) {
+    data[0] = start;
+  } else {
+    const step = (stop - start) / (num - 1);
+    for (let i = 0; i < num; i++) {
+      data[i] = start + i * step;
+    }
+  }
+
   return new WebInferTensor(data, [num], dtype);
 }
 
@@ -601,6 +611,12 @@ export function mul(a: WebInferTensor, b: WebInferTensor | number): WebInferTens
  */
 export function div(a: WebInferTensor, b: WebInferTensor | number): WebInferTensor {
   if (typeof b === 'number') {
+    if (b === 0) {
+      throw new WebInferError(
+        'Division by zero',
+        ErrorCodes.INVALID_ARGUMENT,
+      );
+    }
     const result = new Float32Array(a.size);
     const aData = a.toFloat32Array();
     for (let i = 0; i < a.size; i++) {

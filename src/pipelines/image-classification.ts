@@ -176,27 +176,22 @@ export class ImageClassificationPipeline extends BasePipeline<
 
     const topK = options?.topK ?? 1;
 
+    // Build sorted predictions
+    const predictions: { label: string; score: number }[] = [];
+    for (let i = 0; i < probsArray.length; i++) {
+      predictions.push({
+        label: options?.labels?.[i] ?? this.labels[i] ?? `class_${i}`,
+        score: probsArray[i] ?? 0,
+      });
+    }
+    predictions.sort((a, b) => b.score - a.score);
+
     if (topK > 1 || options?.returnAllScores) {
-      // Return top-K results (simplified to top-1 here)
+      const results = predictions.slice(0, options?.returnAllScores ? predictions.length : topK);
+      return results[0] ?? { label: 'unknown', score: 0 };
     }
 
-    // Find argmax
-    let maxIdx = 0;
-    let maxScore = probsArray[0] ?? 0;
-    
-    for (let i = 1; i < probsArray.length; i++) {
-      if ((probsArray[i] ?? 0) > maxScore) {
-        maxScore = probsArray[i] ?? 0;
-        maxIdx = i;
-      }
-    }
-
-    const label = options?.labels?.[maxIdx] ?? this.labels[maxIdx] ?? `class_${maxIdx}`;
-
-    return {
-      label,
-      score: maxScore,
-    };
+    return predictions[0] ?? { label: 'unknown', score: 0 };
   }
 }
 

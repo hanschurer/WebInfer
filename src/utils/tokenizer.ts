@@ -750,6 +750,7 @@ export class Tokenizer {
       const encodings = texts.map((t) =>
         this.encode(t, { ...options, padding: "do_not_pad" }),
       );
+      if (encodings.length === 0) return [];
       const maxLen = Math.max(...encodings.map((e) => e.inputIds.length));
       return texts.map((t) =>
         this.encode(t, {

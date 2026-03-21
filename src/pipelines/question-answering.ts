@@ -226,18 +226,23 @@ export class QuestionAnsweringPipeline extends BasePipeline<
       returnTokenTypeIds: true,
     });
 
-    return [
+    const tensors = [
       new WebInferTensor(
         BigInt64Array.from(encoded.inputIds.map(id => BigInt(id))),
         [1, encoded.inputIds.length],
         'int64'
       ),
-      new WebInferTensor(
+    ];
+
+    if (encoded.attentionMask) {
+      tensors.push(new WebInferTensor(
         BigInt64Array.from(encoded.attentionMask.map(m => BigInt(m))),
         [1, encoded.attentionMask.length],
         'int64'
-      ),
-    ];
+      ));
+    }
+
+    return tensors;
   }
 
   /**

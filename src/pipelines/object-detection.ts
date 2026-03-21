@@ -136,7 +136,7 @@ export class ObjectDetectionPipeline extends BasePipeline<ImageInput | ImageInpu
     outputs: WebInferTensor[],
     options?: PipelineOptions
   ): Promise<Detection[]> {
-    const opts = options as ObjectDetectionOptions ?? {};
+    const opts = (options as ObjectDetectionOptions) ?? {};
     const threshold = opts.threshold ?? 0.5;
     const topK = opts.topK ?? 100;
     const nms = opts.nms ?? true;

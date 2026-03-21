@@ -41,7 +41,7 @@ const sessionStore: Map<string, ONNXSessionData> = new Map();
  * ONNXRuntime - Real ONNX model inference using onnxruntime-web
  */
 export class ONNXRuntime implements Runtime {
-  readonly name: RuntimeType = "wasm"; // Register as wasm since it's the fallback
+  readonly name: RuntimeType = "wasm"; // Uses WASM execution provider
 
   private initialized = false;
   private executionProvider: "webgpu" | "wasm" = "wasm";
